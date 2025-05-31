@@ -1,0 +1,27 @@
+name: Deploy Express API
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v2
+
+      - name: Set up SSH key for deploy
+        uses: webfactory/ssh-agent@v0.5.3
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: SSH into server and deploy
+        run: |
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -p 21098 qylmxibqny@millionairebia.com << 'EOF'
+            cd /home/qylmxibqny/ts-backend
+            git pull 
+            npm install
+            npm run build
+          EOF
