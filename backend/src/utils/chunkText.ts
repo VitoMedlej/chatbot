@@ -44,8 +44,8 @@ export function chunkText(
 
         function addChunk(chunk: string) {
             const tokens = encoding.encode(chunk);
-            // Only add if not tiny
-            if (tokens.length >= Math.max(20, Math.floor(maxTokens / 4))) {
+            // Only add if not empty
+            if (tokens.length >= 1) {
                 chunks.push(chunk.trim());
             }
         }
@@ -72,10 +72,10 @@ export function chunkText(
                 }
             }
         }
-        // Add last chunk if it's not tiny
+        // Add last chunk if it's not empty
         if (
             currentChunk &&
-            encoding.encode(currentChunk).length >= Math.max(20, Math.floor(maxTokens / 4))
+            encoding.encode(currentChunk).length >= 1
         ) {
             chunks.push(currentChunk.trim());
         }

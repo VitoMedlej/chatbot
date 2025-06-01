@@ -3,7 +3,8 @@ import { RequestHandler } from "express";
 import { chatbotService } from "./chatbotService";
 import { chatbotIngestService } from "./services/chatbotIngestService";
 import { chatbotRagService } from "./services/chatbotRagService";
-
+import { deleteChunks } from "./services/chatbotDeleteService";
+import { listChunks } from "./services/chatbotListService"; // Import the new service
 
 class ChatbotController {
     directQuestionAnswer: RequestHandler = async (req, res) => {
@@ -18,6 +19,16 @@ class ChatbotController {
 
     retrieveAndAnswer: RequestHandler = async (req, res) => {
         const serviceResponse = await chatbotRagService.retrieveAndAnswer(req);
+        return handleServiceResponse(serviceResponse, res);
+    };
+
+    deleteChunksHandler: RequestHandler = async (req, res) => {
+        const serviceResponse = await deleteChunks(req.body.chatbotId, req.body.chunkIds);
+        return handleServiceResponse(serviceResponse, res);
+    };
+
+    listChunksHandler: RequestHandler = async (req, res) => {
+        const serviceResponse = await listChunks(req.body.chatbotId);
         return handleServiceResponse(serviceResponse, res);
     };
 }

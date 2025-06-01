@@ -4,7 +4,7 @@ import { chatbotController } from "./chatbotController";
 export const chatbotRouter = express.Router();
 
 chatbotRouter.post("/direct-qa", chatbotController.directQuestionAnswer);
-
-// Add ingest endpoint under /api/chatbot/ingest-text
 chatbotRouter.post("/ingest-text", chatbotController.ingestTextHandler);
 chatbotRouter.post("/rag-qa", chatbotController.retrieveAndAnswer);
+chatbotRouter.delete("/chunks", chatbotController.deleteChunksHandler);
+chatbotRouter.post("/list-chunks", chatbotController.listChunksHandler);
