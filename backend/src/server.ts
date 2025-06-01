@@ -65,8 +65,8 @@ app.use(helmet());
 // app.set("trust proxy", true);
 
 // Parse JSON and URL-encoded request bodies
-app.use(express.json({ limit: '50mb' })); // Increase limit for potentially large text inputs
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '1mb' })); // Increase limit for potentially large text inputs
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Global Rate Limiter
 const apiLimiter = rateLimit({
