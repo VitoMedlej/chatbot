@@ -5,7 +5,7 @@ import { openai, supabase, logger } from "@/server";
 
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const GPT_MODEL = "gpt-4o-mini";
-const TOP_K = 5;
+const TOP_K = 8;
 
 async function retrieveAndAnswer(req: Request): Promise<ServiceResponse<null | { answer: string }>> {
     try {
@@ -29,7 +29,7 @@ async function retrieveAndAnswer(req: Request): Promise<ServiceResponse<null | {
         // 2. Query Supabase for similar chunks
         console.log("[RAG] Supabase RPC params:", {
             query_embedding: Array.isArray(questionEmbedding) ? `[array of length ${questionEmbedding.length}]` : typeof questionEmbedding,
-            match_threshold: 0.78,
+            match_threshold: 0.6,
             match_count: TOP_K,
             chatbot_id: Number(chatbotId),
         });
@@ -52,7 +52,7 @@ async function retrieveAndAnswer(req: Request): Promise<ServiceResponse<null | {
         const context = (chunks ?? [])
             .map((c: any) => c.content)
             .join("\n---\n")
-            .slice(0, 1000);
+            .slice(0, 8000);
 
         console.log("[RAG] Context sent to GPT-4o-mini (length:", context.length, "):", context.substring(0, 200), context.length > 200 ? "..." : "");
 
@@ -60,8 +60,14 @@ async function retrieveAndAnswer(req: Request): Promise<ServiceResponse<null | {
         const completion = await openai.chat.completions.create({
             model: GPT_MODEL,
             messages: [
-                { role: "system", content: "You are a helpful assistant. Use the provided context to answer the question." },
-                { role: "user", content: `Context:\n${context}\n\nQuestion: ${question}` }
+                {
+                    role: "system",
+                    content: `You are a helpful, concise, and knowledgeable assistant. Answer the user's question using the provided context. If the answer is not in the context, say you're not sure and direct them to contact support."`
+                },
+                {
+                    role: "user",
+                    content: `Context:\n${context}\n\nQuestion: ${question}`
+                }
             ],
             max_tokens: 512,
             temperature: 0.2,
