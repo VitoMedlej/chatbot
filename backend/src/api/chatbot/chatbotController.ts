@@ -5,6 +5,7 @@ import { chatbotIngestService } from "./services/chatbotIngestService";
 import { chatbotRagService } from "./services/chatbotRagService";
 import { deleteChunks } from "./services/chatbotDeleteService";
 import { listChunks } from "./services/chatbotListService"; // Import the new service
+import { chatWithContext } from "./services/chatbotContextService";
 
 class ChatbotController {
     directQuestionAnswer: RequestHandler = async (req, res) => {
@@ -29,6 +30,11 @@ class ChatbotController {
 
     listChunksHandler: RequestHandler = async (req, res) => {
         const serviceResponse = await listChunks(req.body.chatbotId);
+        return handleServiceResponse(serviceResponse, res);
+    };
+
+    chatWithContextHandler: RequestHandler = async (req, res) => {
+        const serviceResponse = await chatWithContext(req);
         return handleServiceResponse(serviceResponse, res);
     };
 }

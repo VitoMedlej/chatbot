@@ -8,3 +8,4 @@ chatbotRouter.post("/ingest-text", chatbotController.ingestTextHandler);
 chatbotRouter.post("/rag-qa", chatbotController.retrieveAndAnswer);
 chatbotRouter.delete("/chunks", chatbotController.deleteChunksHandler);
 chatbotRouter.post("/list-chunks", chatbotController.listChunksHandler);
+chatbotRouter.post("/chat-context", chatbotController.chatWithContextHandler);
