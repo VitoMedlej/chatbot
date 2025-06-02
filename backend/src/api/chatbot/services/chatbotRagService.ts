@@ -52,7 +52,7 @@ async function retrieveAndAnswer(req: Request): Promise<ServiceResponse<null | {
             .join("\n---\n")
             .slice(0, 8000);
 
-        // 3. Ask GPT-4o-mini with context and persona
+        // 3. Ask gpt-4o-mini with context and persona
         const systemPrompt =
             (chatbotInfo?.instructions ||
                 `You are the official chatbot for ${chatbotInfo?.business_name || "this business"}.

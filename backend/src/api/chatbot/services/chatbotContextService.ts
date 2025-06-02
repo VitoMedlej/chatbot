@@ -109,6 +109,7 @@ export async function chatWithContext(req: any): Promise<ServiceResponse<null | 
 
         return ServiceResponse.success("Bot reply generated.", botReply);
     } catch (err: any) {
+        console.log('err: ', err);
         return ServiceResponse.failure("Internal server error.", null, StatusCodes.INTERNAL_SERVER_ERROR);
     }
 }

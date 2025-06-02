@@ -30,7 +30,7 @@ export async function autoGeneratePersona(req: any): Promise<ServiceResponse<any
         return ServiceResponse.failure("No content found for persona generation.", null, StatusCodes.NOT_FOUND);
     }
 
-    const combined = chunks.map(c => c.content).join("\n\n").slice(0, 6000);
+    const combined = chunks.map(c => c.content).join("\n\n").slice(0, 3000);
 
     // Use OpenAI to generate business_name, persona, instructions
     const completion = await openai.chat.completions.create({
@@ -72,15 +72,16 @@ Respond in JSON:
     }
 
     // Save to chatbots table (int8 id)
-    const { error: updateError } = await supabase.from("chatbots").update({
+    const { error: upsertError } = await supabase.from("chatbots").upsert({
+        id: chatbotId,
         business_name: personaObj.business_name,
         persona: personaObj.persona,
         instructions: personaObj.instructions
-    }).eq("id", chatbotId);
+    });
 
-    if (updateError) {
-        console.error("[autoGeneratePersona] Failed to update chatbot persona.", updateError);
-        return ServiceResponse.failure("Failed to update chatbot persona.", null, StatusCodes.INTERNAL_SERVER_ERROR);
+    if (upsertError) {
+        console.error("[autoGeneratePersona] Failed to upsert chatbot persona.", upsertError);
+        return ServiceResponse.failure("Failed to upsert chatbot persona.", null, StatusCodes.INTERNAL_SERVER_ERROR);
     }
 
     return ServiceResponse.success("Persona generated and saved.", personaObj);
