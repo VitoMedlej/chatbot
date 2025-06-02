@@ -4,7 +4,7 @@ import { StatusCodes } from "http-status-codes";
 import { chunkText } from "@/utils/chunkText";
 import { supabase, logger, openai } from "@/server";
 
-async function ingestText(req: Request): Promise<ServiceResponse<null>> {
+export async function ingestText(req: Request): Promise<ServiceResponse<null>> {
     try {
         const { text, chatbotId, userId } = req.body;
 

@@ -9,3 +9,7 @@ chatbotRouter.post("/rag-qa", chatbotController.retrieveAndAnswer);
 chatbotRouter.delete("/chunks", chatbotController.deleteChunksHandler);
 chatbotRouter.post("/list-chunks", chatbotController.listChunksHandler);
 chatbotRouter.post("/chat-context", chatbotController.chatWithContextHandler);
+chatbotRouter.post("/website-links", chatbotController.websiteLinksHandler);
+chatbotRouter.post("/sitemap-links", chatbotController.sitemapLinksHandler);
+chatbotRouter.post("/extract-website", chatbotController.extractWebsiteInfoHandler);
+chatbotRouter.post("/crawl-and-ingest", chatbotController.crawlAndIngestWebsiteHandler);

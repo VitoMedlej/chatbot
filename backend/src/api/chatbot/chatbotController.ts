@@ -6,6 +6,9 @@ import { chatbotRagService } from "./services/chatbotRagService";
 import { deleteChunks } from "./services/chatbotDeleteService";
 import { listChunks } from "./services/chatbotListService"; // Import the new service
 import { chatWithContext } from "./services/chatbotContextService";
+import { extractWebsiteInfo } from "./services/websiteExtractService";
+import { getAllLinksService, getSitemapLinksService } from "./services/websiteCrawlService";
+import { crawlAndIngestWebsite } from "./services/crawlAndIngestWebsiteService";
 
 class ChatbotController {
     directQuestionAnswer: RequestHandler = async (req, res) => {
@@ -35,6 +38,26 @@ class ChatbotController {
 
     chatWithContextHandler: RequestHandler = async (req, res) => {
         const serviceResponse = await chatWithContext(req);
+        return handleServiceResponse(serviceResponse, res);
+    };
+
+    extractWebsiteInfoHandler: RequestHandler = async (req, res) => {
+        const serviceResponse = await extractWebsiteInfo(req);
+        return handleServiceResponse(serviceResponse, res);
+    };
+
+    websiteLinksHandler: RequestHandler = async (req, res) => {
+        const serviceResponse = await getAllLinksService(req);
+        return handleServiceResponse(serviceResponse, res);
+    };
+
+    sitemapLinksHandler: RequestHandler = async (req, res) => {
+        const serviceResponse = await getSitemapLinksService(req);
+        return handleServiceResponse(serviceResponse, res);
+    };
+
+    crawlAndIngestWebsiteHandler: RequestHandler = async (req, res) => {
+        const serviceResponse = await crawlAndIngestWebsite(req);
         return handleServiceResponse(serviceResponse, res);
     };
 }
