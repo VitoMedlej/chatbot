@@ -8,7 +8,10 @@ import { listChunks } from "./services/chatbotListService"; // Import the new se
 import { chatWithContext } from "./services/chatbotContextService";
 import { extractWebsiteInfo } from "./services/websiteExtractService";
 import { getAllLinksService, getSitemapLinksService } from "./services/websiteCrawlService";
-import { crawlAndIngestWebsite } from "./services/crawlAndIngestWebsiteService";
+import { Request, ParamsDictionary } from "express-serve-static-core";
+import { ParsedQs } from "qs";
+import { crawlAndIngestWebsiteJob } from "./services/crawlAndIngestWebsiteService";
+import { autoGeneratePersona } from "./services/autoGeneratePersonaService";
 
 class ChatbotController {
     directQuestionAnswer: RequestHandler = async (req, res) => {
@@ -57,9 +60,20 @@ class ChatbotController {
     };
 
     crawlAndIngestWebsiteHandler: RequestHandler = async (req, res) => {
-        const serviceResponse = await crawlAndIngestWebsite(req);
+        const serviceResponse = await crawlAndIngestWebsiteJob({
+            url: req.body.url,
+            chatbotId: req.body.chatbotId,
+            userId: req.body.userId,
+            fallbackUrls: req.body.fallbackUrls
+        });
+        return handleServiceResponse(serviceResponse, res);
+    };
+
+    autoGeneratePersonaHandler: RequestHandler = async (req, res) => {
+        const serviceResponse = await autoGeneratePersona(req);
         return handleServiceResponse(serviceResponse, res);
     };
 }
 
 export const chatbotController = new ChatbotController();
+

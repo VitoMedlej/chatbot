@@ -30,15 +30,13 @@ export async function chatWithContext(req: any): Promise<ServiceResponse<null | 
             return ServiceResponse.failure("Failed to fetch chat history.", null, StatusCodes.INTERNAL_SERVER_ERROR);
         }
 
-        // --- VECTOR SEARCH: retrieve relevant chunks ---
-        // Get embedding for the current message
+        // VECTOR SEARCH: retrieve relevant chunks
         const embeddingResponse = await openai.embeddings.create({
             model: "text-embedding-3-small",
             input: message,
         });
         const embedding = embeddingResponse.data[0].embedding;
 
-        // Query vector DB for top 3 relevant chunks
         const { data: chunks, error: chunkError } = await supabase.rpc("match_document_chunks", {
             query_embedding: embedding,
             match_threshold: 0.75,
@@ -50,28 +48,54 @@ export async function chatWithContext(req: any): Promise<ServiceResponse<null | 
             return ServiceResponse.failure("Failed to retrieve knowledge base context.", null, StatusCodes.INTERNAL_SERVER_ERROR);
         }
 
-        // --- Build prompt ---
-        let prompt = "";
-        // Add chat history
+        // Fetch chatbot persona/instructions
+        const { data: chatbotInfo, error: chatbotInfoError } = await supabase
+            .from("chatbots")
+            .select("business_name,persona,instructions")
+            .eq("id", chatbotId)
+            .single();
+
+        if (chatbotInfoError) {
+            return ServiceResponse.failure("Failed to fetch chatbot info.", null, StatusCodes.INTERNAL_SERVER_ERROR);
+        }
+
+        const systemPrompt =
+            chatbotInfo?.instructions ||
+            chatbotInfo?.persona ||
+            `You are the official chatbot for ${chatbotInfo?.business_name || "this business"}. Be concise unless asked for details. Never say you are ChatGPT. Always answer as a representative of ${chatbotInfo?.business_name || "this business"}.`;
+
+        // Build chat history string
+        let chatHistory = "";
         (history || []).reverse().forEach((entry: any) => {
-            prompt += `${entry.sender === "user" ? "User" : "Bot"}: ${entry.message}\n`;
+            chatHistory += `${entry.sender === "user" ? "User" : "Bot"}: ${entry.message}\n`;
         });
-        // Add knowledge context
+
+        // Build knowledge context string
+        let knowledgeContext = "";
         if (chunks && chunks.length > 0) {
-            prompt += "\nKnowledge Base Context:\n";
+            knowledgeContext += "\nKnowledge Base Context:\n";
             chunks.forEach((chunk: any, idx: number) => {
-                prompt += `Context ${idx + 1}: ${chunk.content}\n`;
+                let meta = "";
+                if (chunk.title) meta += `Title: ${chunk.title}\n`;
+                if (chunk.source_url) meta += `URL: ${chunk.source_url}\n`;
+                if (chunk.links && chunk.links.length) meta += `Links: ${JSON.stringify(chunk.links)}\n`;
+                if (chunk.buttons && chunk.buttons.length) meta += `Buttons: ${JSON.stringify(chunk.buttons)}\n`;
+                knowledgeContext += `Context ${idx + 1}:\n${meta}Content: ${chunk.content}\n`;
             });
         }
-        prompt += "Bot:";
 
-        // --- Call OpenAI ---
+        // Compose user prompt
+        const userPrompt = `${chatHistory}\n${knowledgeContext}\nBot:`;
+
+        // Call OpenAI
         const llmResponse = await openai.chat.completions.create({
-            model: "gpt-3.5-turbo",
+            model: "gpt-4o-mini",
             messages: [
-                { role: "system", content: "You are a helpful assistant. Use the provided context if relevant." },
-                { role: "user", content: prompt }
-            ]
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userPrompt }
+            ],
+            max_tokens: 512,
+            temperature: 0.2,
         });
         const botReply = llmResponse.choices[0].message.content;
 

@@ -13,3 +13,4 @@ chatbotRouter.post("/website-links", chatbotController.websiteLinksHandler);
 chatbotRouter.post("/sitemap-links", chatbotController.sitemapLinksHandler);
 chatbotRouter.post("/extract-website", chatbotController.extractWebsiteInfoHandler);
 chatbotRouter.post("/crawl-and-ingest", chatbotController.crawlAndIngestWebsiteHandler);
+chatbotRouter.post("/auto-generate-persona", chatbotController.autoGeneratePersonaHandler);

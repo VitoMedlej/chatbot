@@ -9,8 +9,13 @@ import { parseStringPromise } from "xml2js";
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-export async function crawlAndIngestWebsite(req: any): Promise<ServiceResponse<any>> {
-    const { url: rootUrl, chatbotId, userId, fallbackUrls } = req.body;
+export async function crawlAndIngestWebsiteJob(job: {
+    url: string,
+    chatbotId: string,
+    userId: string,
+    fallbackUrls?: string[]
+}): Promise<ServiceResponse<any>> {
+    const { url: rootUrl, chatbotId, userId, fallbackUrls } = job;
     if (!rootUrl || typeof rootUrl !== "string" || !chatbotId || !userId) {
         return ServiceResponse.failure("Missing or invalid URL or chatbotId or userId.", null, StatusCodes.BAD_REQUEST);
     }
@@ -19,6 +24,7 @@ export async function crawlAndIngestWebsite(req: any): Promise<ServiceResponse<a
     const processedContentUrls = new Set<string>();
     let pagesCrawledCount = 0;
     let chunksIngestedCount = 0;
+    let errors: any[] = [];
 
     try {
         const baseUrl = new URL(rootUrl);
@@ -27,7 +33,6 @@ export async function crawlAndIngestWebsite(req: any): Promise<ServiceResponse<a
         let sitemapUrls: string[] = [];
         let urlsFromSitemap: string[] = [];
         try {
-            // Try robots.txt
             const robotsTxtUrl = new URL("/robots.txt", baseUrl).href;
             const robotsTxtRes = await fetch(robotsTxtUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
             if (robotsTxtRes.ok) {
@@ -37,11 +42,9 @@ export async function crawlAndIngestWebsite(req: any): Promise<ServiceResponse<a
                     sitemapUrls = sitemapLines.map(line => line.substring("sitemap:".length).trim());
                 }
             }
-            // Fallback: default sitemap.xml location
             if (sitemapUrls.length === 0) {
                 sitemapUrls.push(new URL("/sitemap.xml", baseUrl).href);
             }
-            // Fetch and parse sitemap(s)
             for (const sUrl of sitemapUrls) {
                 await delay(500);
                 try {
@@ -59,14 +62,18 @@ export async function crawlAndIngestWebsite(req: any): Promise<ServiceResponse<a
                             }
                         }
                     }
-                } catch {}
+                } catch (err: any) {
+                    errors.push({ type: "sitemap", url: sUrl, error: err.message || err });
+                }
             }
             urlsFromSitemap = Array.from(new Set(urlsFromSitemap));
             if (urlsFromSitemap.length > 0) {
                 crawledUrls.add(rootUrl);
                 urlsFromSitemap.forEach(u => crawledUrls.add(u));
             }
-        } catch {}
+        } catch (err: any) {
+            errors.push({ type: "sitemap", url: rootUrl, error: err.message || err });
+        }
 
         // --- Fallback: If no URLs found, try homepage links ---
         if (crawledUrls.size === 0) {
@@ -83,7 +90,9 @@ export async function crawlAndIngestWebsite(req: any): Promise<ServiceResponse<a
                     crawledUrls.add(rootUrl);
                     links.forEach(l => crawledUrls.add(l));
                 }
-            } catch {}
+            } catch (err: any) {
+                errors.push({ type: "homepage", url: rootUrl, error: err.message || err });
+            }
         }
 
         // --- Fallback: If still no URLs, use fallbackUrls from user ---
@@ -94,7 +103,7 @@ export async function crawlAndIngestWebsite(req: any): Promise<ServiceResponse<a
         if (crawledUrls.size === 0) {
             return ServiceResponse.failure(
                 "No URLs found to crawl. Please provide a list of URLs to crawl.",
-                { askForUrls: true },
+                { askForUrls: true, errors },
                 StatusCodes.NOT_FOUND
             );
         }
@@ -106,7 +115,10 @@ export async function crawlAndIngestWebsite(req: any): Promise<ServiceResponse<a
             await delay(500);
             try {
                 const pageRes = await fetch(pageUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
-                if (!pageRes.ok) continue;
+                if (!pageRes.ok) {
+                    errors.push({ type: "page", url: pageUrl, error: `HTTP ${pageRes.status}` });
+                    continue;
+                }
                 const pageHtml = await pageRes.text();
                 const pageDom = new JSDOM(pageHtml, { url: pageUrl });
                 const doc = pageDom.window.document;
@@ -119,10 +131,14 @@ export async function crawlAndIngestWebsite(req: any): Promise<ServiceResponse<a
                     const reader = new Readability(doc);
                     article = reader.parse();
                     content = article?.textContent || "";
-                } catch {
+                } catch (err: any) {
                     content = doc.body?.textContent || "";
+                    errors.push({ type: "readability", url: pageUrl, error: err.message || err });
                 }
-                if (!content.trim()) continue;
+                if (!content.trim()) {
+                    errors.push({ type: "content", url: pageUrl, error: "No significant content extracted" });
+                    continue;
+                }
 
                 // --- Extract Links & Buttons for chatbot_knowledge (metadata) ---
                 const links = Array.from(doc.querySelectorAll("a"))
@@ -170,11 +186,15 @@ export async function crawlAndIngestWebsite(req: any): Promise<ServiceResponse<a
                 } as any;
 
                 const ingestResponse = await ingestText(ingestReq);
-                if (!ingestResponse.success) continue;
+                if (!ingestResponse.success) {
+                    errors.push({ type: "embedding", url: pageUrl, error: ingestResponse.message });
+                    continue;
+                }
                 pagesCrawledCount++;
                 chunksIngestedCount += 1;
                 processedContentUrls.add(pageUrl);
             } catch (pageErr: any) {
+                errors.push({ type: "page", url: pageUrl, error: pageErr.message || pageErr });
                 continue;
             }
         }
@@ -182,16 +202,16 @@ export async function crawlAndIngestWebsite(req: any): Promise<ServiceResponse<a
         if (pagesCrawledCount === 0) {
             return ServiceResponse.failure(
                 "No valid pages were crawled and embedded. Please provide a list of URLs to crawl.",
-                { askForUrls: true },
+                { askForUrls: true, errors },
                 StatusCodes.NOT_FOUND
             );
         }
 
         return ServiceResponse.success(
             `Website crawl completed. ${pagesCrawledCount} pages processed, ${chunksIngestedCount} chunks ingested.`,
-            { crawledUrls: Array.from(processedContentUrls), pagesProcessed: pagesCrawledCount, chunksIngested: chunksIngestedCount }
+            { crawledUrls: Array.from(processedContentUrls), pagesProcessed: pagesCrawledCount, chunksIngested: chunksIngestedCount, errors }
         );
     } catch (err: any) {
-        return ServiceResponse.failure(`Failed to crawl and ingest website: ${err.message}`, null, StatusCodes.INTERNAL_SERVER_ERROR);
+        return ServiceResponse.failure(`Failed to crawl and ingest website: ${err.message}`, { errors }, StatusCodes.INTERNAL_SERVER_ERROR);
     }
 }
