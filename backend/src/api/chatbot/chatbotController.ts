@@ -12,6 +12,7 @@ import { Request, ParamsDictionary } from "express-serve-static-core";
 import { ParsedQs } from "qs";
 import { crawlAndIngestWebsiteJob } from "./services/crawlAndIngestWebsiteService";
 import { autoGeneratePersona } from "./services/autoGeneratePersonaService";
+import { createChatbotService } from "./services/chatbotCreateService";
 
 class ChatbotController {
     directQuestionAnswer: RequestHandler = async (req, res) => {
@@ -71,6 +72,11 @@ class ChatbotController {
 
     autoGeneratePersonaHandler: RequestHandler = async (req, res) => {
         const serviceResponse = await autoGeneratePersona(req);
+        return handleServiceResponse(serviceResponse, res);
+    };
+
+    createChatbotHandler: RequestHandler = async (req, res) => {
+        const serviceResponse = await createChatbotService(req);
         return handleServiceResponse(serviceResponse, res);
     };
 }

@@ -5,6 +5,7 @@ import AppHeader from "@/layout/AppHeader";
 import AppSidebar from "@/layout/AppSidebar";
 import Backdrop from "@/layout/Backdrop";
 import React from "react";
+import ProtectedRoute from "../ProtectedRoute";
 
 export default function AdminLayout({
   children,
@@ -22,6 +23,8 @@ export default function AdminLayout({
 
   return (
     <div className="min-h-screen xl:flex">
+      <ProtectedRoute>
+
       {/* Sidebar and Backdrop */}
       <AppSidebar />
       <Backdrop />
@@ -34,6 +37,8 @@ export default function AdminLayout({
         {/* Page Content */}
         <div className="p-4 mx-auto max-w-(--breakpoint-2xl) md:p-6">{children}</div>
       </div>
+      </ProtectedRoute>
+
     </div>
   );
 }
