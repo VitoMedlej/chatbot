@@ -12,6 +12,8 @@ import { crawlAndIngestWebsiteJob } from "./services/crawlAndIngestWebsiteServic
 import { autoGeneratePersona, upsertDefaultPersona } from "./services/autoGeneratePersonaService";
 import { createChatbotService } from "./services/chatbotCreateService";
 import { listUserChatbots } from "./services/listChatbotsService";
+import { ingestManualLinks } from "./services/manualLinksService";
+
 
 class ChatbotController {
     directQuestionAnswer: RequestHandler = async (req, res) => {
@@ -90,7 +92,11 @@ class ChatbotController {
         const serviceResponse = await upsertDefaultPersona(chatbotId, businessName);
         return handleServiceResponse(serviceResponse, res);
     };
+
+    ingestManualLinksHandler: RequestHandler = async (req, res) => {
+        const serviceResponse = await ingestManualLinks(req);
+        return handleServiceResponse(serviceResponse, res);
+    };
 }
 
 export const chatbotController = new ChatbotController();
-

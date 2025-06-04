@@ -17,3 +17,4 @@ chatbotRouter.post("/auto-generate-persona", chatbotController.autoGeneratePerso
 chatbotRouter.post("/create", chatbotController.createChatbotHandler);
 chatbotRouter.get("/list", chatbotController.listUserChatbotsHandler);
 chatbotRouter.post("/upsert-default-persona", chatbotController.upsertDefaultPersonaHandler);
+chatbotRouter.post("/manual-links", chatbotController.ingestManualLinksHandler);

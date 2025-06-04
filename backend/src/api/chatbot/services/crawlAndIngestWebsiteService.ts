@@ -31,81 +31,45 @@ export async function crawlAndIngestWebsiteJob(job: {
         let urlsToProcess: string[] = [];
         const baseUrl = rootUrl;
 
-        // If user selected URLs, use only those
         if (Array.isArray(selectedUrls) && selectedUrls.length > 0) {
             urlsToProcess = selectedUrls;
-            urlsToProcess.forEach(u => crawledUrls.add(u));
         } else {
-            // --- Step 1: Find and Parse Sitemap ---
-            let sitemapUrls: string[] = [];
+            // Try sitemap.xml
             let urlsFromSitemap: string[] = [];
             try {
-                const robotsTxtUrl = new URL("/robots.txt", baseUrl).href;
-                const robotsTxtRes = await fetch(robotsTxtUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
-                if (robotsTxtRes.ok) {
-                    const robotsTxt = await robotsTxtRes.text();
-                    const sitemapLines = robotsTxt.split("\n").filter(line => line.toLowerCase().startsWith("sitemap:"));
-                    if (sitemapLines.length > 0) {
-                        sitemapUrls = sitemapLines.map(line => line.substring("sitemap:".length).trim());
-                    }
-                }
-                if (sitemapUrls.length === 0) {
-                    sitemapUrls.push(new URL("/sitemap.xml", baseUrl).href);
-                }
-                for (const sUrl of sitemapUrls) {
-                    await delay(500);
-                    try {
-                        const sitemapRes = await fetch(sUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
-                        if (sitemapRes.ok) {
-                            const sitemapXml = await sitemapRes.text();
-                            const parsedSitemap = await parseStringPromise(sitemapXml);
-                            if (parsedSitemap.sitemapindex && parsedSitemap.sitemapindex.sitemap) {
-                                for (const s of parsedSitemap.sitemapindex.sitemap) {
-                                    if (s.loc && s.loc[0]) sitemapUrls.push(s.loc[0]);
-                                }
-                            } else if (parsedSitemap.urlset && parsedSitemap.urlset.url) {
-                                for (const u of parsedSitemap.urlset.url) {
-                                    if (u.loc && u.loc[0]) urlsFromSitemap.push(u.loc[0]);
-                                }
-                            }
+                const sitemapUrl = new URL("/sitemap.xml", baseUrl).href;
+                const sitemapRes = await fetch(sitemapUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
+                if (sitemapRes.ok) {
+                    const sitemapXml = await sitemapRes.text();
+                    const parsedSitemap = await parseStringPromise(sitemapXml);
+                    if (parsedSitemap.urlset && parsedSitemap.urlset.url) {
+                        for (const u of parsedSitemap.urlset.url) {
+                            if (u.loc && u.loc[0]) urlsFromSitemap.push(u.loc[0]);
                         }
-                    } catch (err: any) {
-                        errors.push({ type: "sitemap", url: sUrl, error: err.message || err });
                     }
-                }
-                urlsFromSitemap = Array.from(new Set(urlsFromSitemap));
-                if (urlsFromSitemap.length > 0) {
-                    crawledUrls.add(rootUrl);
-                    urlsFromSitemap.forEach(u => crawledUrls.add(u));
                 }
             } catch (err: any) {
-                errors.push({ type: "sitemap", url: rootUrl, error: err.message || err });
+                errors.push({ type: "sitemap", url: baseUrl, error: err.message || err });
             }
-
-            // --- Fallback: If no URLs found, try homepage links ---
-            if (crawledUrls.size === 0) {
+            // Fallback: homepage links
+            if (urlsFromSitemap.length === 0) {
                 try {
-                    const homeRes = await fetch(rootUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
+                    const homeRes = await fetch(baseUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
                     if (homeRes.ok) {
                         const homeHtml = await homeRes.text();
-                        const homeDom = new JSDOM(homeHtml, { url: rootUrl });
+                        const homeDom = new JSDOM(homeHtml, { url: baseUrl });
                         const anchors = Array.from(homeDom.window.document.querySelectorAll("a"));
-                        const base = new URL(rootUrl);
+                        const base = new URL(baseUrl);
                         const links = anchors
                             .map(a => a.href ? new URL(a.href, base).href : "")
                             .filter(href => href.startsWith("http") && href.includes(base.hostname));
-                        crawledUrls.add(rootUrl);
-                        links.forEach(l => crawledUrls.add(l));
+                        urlsFromSitemap = links;
                     }
                 } catch (err: any) {
-                    errors.push({ type: "homepage", url: rootUrl, error: err.message || err });
+                    errors.push({ type: "homepage", url: baseUrl, error: err.message || err });
                 }
             }
-
-            // --- Fallback: If still no URLs, use fallbackUrls from user ---
-            if (crawledUrls.size === 0 && Array.isArray(fallbackUrls) && fallbackUrls.length > 0) {
-                fallbackUrls.forEach(u => crawledUrls.add(u));
-            }
+            urlsToProcess = Array.from(new Set([baseUrl, ...urlsFromSitemap]));
         }
 
         if (urlsToProcess.length === 0) {
@@ -146,48 +110,16 @@ export async function crawlAndIngestWebsiteJob(job: {
                     continue;
                 }
 
-                // --- Extract Links & Buttons for chatbot_knowledge (metadata) ---
-                const links = Array.from(doc.querySelectorAll("a"))
-                    .map(a => ({
-                        text: a.textContent?.trim() || "",
-                        href: a.href ? new URL(a.href, pageUrl).href : ""
-                    }))
-                    .filter(a => a.href && a.text && a.href.startsWith("http"));
-
-                const buttons = Array.from(doc.querySelectorAll("button,input[type='button'],input[type='submit']"))
-                    .map(b => ({
-                        text: b.textContent?.trim() || b.getAttribute("value") || "",
-                        action: b.getAttribute("onclick") || ""
-                    }))
-                    .filter(b => b.text);
-
-                // --- Store Metadata in chatbot_knowledge table ---
-                await supabase.from("chatbot_knowledge").delete().eq("source_name", pageUrl).eq("chatbot_id", chatbotId);
-                await supabase.from("chatbot_knowledge").insert([
-                    {
-                        chatbot_id: chatbotId,
-                        source_type: "website_page",
-                        user_id: userId,
-                        source_name: pageUrl,
-                        title: title,
-                        description: doc.querySelector('meta[name="description"]')?.getAttribute("content") || article?.excerpt || "",
-                        content,
-                        links,
-                        buttons,
-                        metadata: null
-                    }
-                ]);
-
                 // --- Send content to RAG pipeline (ingestText) ---
                 const ingestReq = {
                     body: {
-                        text: content,
+                        text: String(content),
                         chatbotId: chatbotId,
                         userId: userId,
                         source_url: pageUrl,
                         title,
-                        links,
-                        buttons
+                        links: [], // Optionally extract links/buttons as above
+                        buttons: []
                     }
                 } as any;
 

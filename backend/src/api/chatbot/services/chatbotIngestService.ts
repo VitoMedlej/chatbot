@@ -50,10 +50,14 @@ export async function ingestText(req: Request): Promise<ServiceResponse<null>> {
                         const { error: insertError } = await supabase
                             .from('document_chunks')
                             .insert({
-                                content: chunk,
-                                embedding: embedding,
+                                content: String(chunk), // Always string
+                                embedding: embedding, // Always array of floats
                                 chatbot_id: chatbotId,
-                                user_id: validUserId, // <-- Insert as string or number, do NOT cast
+                                user_id: validUserId,
+                                source_url: req.body.source_url || null,
+                                title: req.body.title || null,
+                                links: req.body.links ? JSON.stringify(req.body.links) : null,
+                                buttons: req.body.buttons ? JSON.stringify(req.body.buttons) : null,
                             });
 
                         if (insertError) {

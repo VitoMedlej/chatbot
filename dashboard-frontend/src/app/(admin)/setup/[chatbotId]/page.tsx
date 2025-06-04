@@ -8,6 +8,8 @@ import Button from "@/components/ui/button/Button";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
 import { ChevronLeftIcon } from "@/icons";
+import PageSelectionStep from "./components/PageSelectionStep";
+
 
 type Step = 1 | 2 | 3;
 
@@ -18,6 +20,7 @@ export default function ChatbotSetupPage() {
 
   const [step, setStep] = useState<Step>(1);
   const [website, setWebsite] = useState("");
+  const [manualLinks, setManualLinks] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [allPages, setAllPages] = useState<string[]>([]);
@@ -89,7 +92,7 @@ export default function ChatbotSetupPage() {
       return;
     }
     setAllPages(result.responseObject);
-    setSelectedPages(result.responseObject.slice(0, 10)); // Preselect first 10
+    setSelectedPages(result.responseObject.slice(0, 100)); // Preselect first 10
   };
 
   // Step 1b: User selects pages to crawl
@@ -136,6 +139,40 @@ export default function ChatbotSetupPage() {
     setStep(3);
   };
 
+  // Ingest manual links
+  const handleIngestManualLinks = async () => {
+    if (!manualLinks.trim()) return;
+    setLoading(true);
+    setError(null);
+    const user = (await supabase.auth.getUser()).data.user;
+    if (!user) {
+      setError("You must be logged in.");
+      setLoading(false);
+      return;
+    }
+    const links = manualLinks
+      .split("\n")
+      .map(l => l.trim())
+      .filter(l => l.startsWith("http"));
+    const res = await fetch("http://localhost:8080/api/chatbot/manual-links", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chatbotId,
+        userId: user.id,
+        links,
+      }),
+    });
+    const result = await res.json();
+    setLoading(false);
+    if (!res.ok) {
+      setError(result.message || "Failed to ingest links.");
+      return;
+    }
+    setScrapedPages(result.responseObject?.crawledUrls || []);
+    setStep(2);
+  };
+
   // Step 3: Done
   const handleGoToDashboard = () => {
     router.replace("/(admin)");
@@ -144,6 +181,8 @@ export default function ChatbotSetupPage() {
   const handleBack = () => {
     router.replace("/setup");
   };
+
+  const cleanPages = allPages.filter((url) => !url.includes("#"));
 
   if (loading) return <div className="p-8 text-center">Loading...</div>;
 
@@ -174,51 +213,24 @@ export default function ChatbotSetupPage() {
           <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 3 ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-500"}`}>3</div>
         </div>
         {step === 1 && (
-          <>
-            <form onSubmit={handleFetchLinks} className="space-y-6">
-              <div>
-                <Label>Website URL</Label>
-                <Input
-                  type="url"
-                  value={website}
-                  onChange={e => setWebsite(e.target.value)}
-                  required
-                  placeholder="https://yourwebsite.com"
-                />
-              </div>
-              {error && <div className="text-red-500">{error}</div>}
-              <Button className="w-full" type="submit" size="sm" disabled={loading}>
-                {loading ? "Fetching Links..." : "Fetch Pages"}
-              </Button>
-            </form>
-            {allPages.length > 0 && (
-              <div className="mt-6">
-                <Label>Select pages to include</Label>
-                <div className="max-h-64 overflow-y-auto border rounded p-2 bg-gray-50 dark:bg-gray-900">
-                  {allPages.map((url, i) => (
-                    <div key={i} className="flex items-center gap-2 py-1">
-                      <input
-                        type="checkbox"
-                        checked={selectedPages.includes(url)}
-                        onChange={() => handlePageToggle(url)}
-                        id={`page-${i}`}
-                      />
-                      <label htmlFor={`page-${i}`} className="truncate text-sm">{url}</label>
-                    </div>
-                  ))}
-                </div>
-                <Button
-                  className="w-full mt-4"
-                  type="button"
-                  size="sm"
-                  disabled={loading || selectedPages.length === 0}
-                  onClick={handleCrawlSelected}
-                >
-                  {loading ? "Crawling..." : "Crawl Selected Pages"}
-                </Button>
-              </div>
-            )}
-          </>
+      <PageSelectionStep
+    website={website}
+    setWebsite={setWebsite}
+    manualLinks={manualLinks}
+    setManualLinks={setManualLinks}
+    allPages={allPages}
+    selectedPages={selectedPages}
+    setSelectedPages={setSelectedPages}
+    loading={loading}
+    error={error}
+    handleFetchLinks={handleFetchLinks}
+    handlePageToggle={handlePageToggle}
+    handleCrawlSelected={handleCrawlSelected}
+    handleIngestManualLinks={handleIngestManualLinks}
+    setAllPages={setAllPages}
+    setLoading={setLoading}
+    setError={setError}
+  />
         )}
         {step === 2 && (
           <div className="space-y-6">
