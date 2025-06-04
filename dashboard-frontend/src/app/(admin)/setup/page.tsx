@@ -21,6 +21,7 @@ export default function SetupPage() {
     const fetchChatbots = async () => {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
+      console.log('user: ', user);
       if (!user) {
         router.replace("/signin");
         return;

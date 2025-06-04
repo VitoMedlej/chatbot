@@ -114,7 +114,7 @@ export async function chatWithContext(req: any): Promise<ServiceResponse<null | 
                 max_tokens: 512,
                 temperature: 0.2,
             });
-            botReply = llmResponse.choices[0].message.content;
+            botReply = llmResponse.choices[0].message.content ?? "";
         } catch (llmErr: any) {
             console.error("OpenAI chat completion error", llmErr);
             return ServiceResponse.failure("Failed to generate bot reply.", null, StatusCodes.INTERNAL_SERVER_ERROR);

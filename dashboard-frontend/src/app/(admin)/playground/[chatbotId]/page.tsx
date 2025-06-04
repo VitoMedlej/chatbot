@@ -86,13 +86,13 @@ export default function ChatbotPlaygroundPage() {
         </div>
         <form onSubmit={sendMessage} className="flex gap-2">
           <Input
-            ref={inputRef}
+            // ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Type your message…"
             className="flex-1"
             disabled={loading}
-            autoFocus
+            // autoFocus
           />
           <Button type="submit" disabled={loading || !input.trim()}>
             Send

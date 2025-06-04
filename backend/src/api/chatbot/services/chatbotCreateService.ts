@@ -13,27 +13,14 @@ export async function createChatbotService(req: any): Promise<ServiceResponse<an
         if (!business_name || typeof business_name !== "string" || business_name.length < 2) {
             return ServiceResponse.failure("Invalid or missing business_name", null);
         }
-        if (!user_id || (typeof user_id !== "string" && typeof user_id !== "number")) {
+        if (!user_id || typeof user_id !== "string" || user_id.length < 8) {
             return ServiceResponse.failure("Invalid or missing user_id", null);
         }
 
-        // Convert user_id to a numeric value if it's a string representation of a number
-        const numericUserId =
-            typeof user_id === 'number'
-                ? user_id
-                : typeof user_id === 'string' && !isNaN(Number(user_id))
-                    ? Number(user_id)
-                    : null;
-
-        if (!numericUserId) {
-            console.error('Missing or invalid userId for document_chunks insert');
-            return ServiceResponse.failure("Invalid user ID", null);
-        }
-
-        // Insert chatbot
+        // Insert chatbot with user_id as UUID string
         const { data, error } = await supabase
             .from("chatbots")
-            .insert([{ business_name, user_id: numericUserId }])
+            .insert([{ business_name, user_id }])
             .select("id")
             .single();
 
