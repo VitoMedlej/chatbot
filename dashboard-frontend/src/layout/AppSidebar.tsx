@@ -42,6 +42,16 @@ const navItems: NavItem[] = [
     name: "User Profile",
     path: "/profile",
   },
+      {
+    icon: <UserCircleIcon />,
+    name: "playground",
+    path: "/playground",
+  },
+    {
+    icon: <UserCircleIcon />,
+    name: "User Profile",
+    path: "/vault",
+  },
     {
     icon: <UserCircleIcon />,
     name: "AI Chatbot",

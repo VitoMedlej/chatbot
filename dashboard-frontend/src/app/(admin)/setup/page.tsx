@@ -1,4 +1,4 @@
-// Chatbot selection/creation page for onboarding
+// Chatbot selection/creation page for onboarding. Only allow "Setup" if not setup, otherwise show "Manage Knowledge".
 
 "use client";
 import { useEffect, useState } from "react";
@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase";
 import Button from "@/components/ui/button/Button";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
-import { ChevronLeftIcon } from "@/icons"; // If you have an icon component
+import { ChevronLeftIcon } from "@/icons";
 
 export default function SetupPage() {
   const [chatbots, setChatbots] = useState<any[]>([]);
@@ -21,7 +21,6 @@ export default function SetupPage() {
     const fetchChatbots = async () => {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
-      console.log('user: ', user);
       if (!user) {
         router.replace("/signin");
         return;
@@ -35,8 +34,13 @@ export default function SetupPage() {
   }, [router]);
 
   const handleSelect = (id: string) => {
-    if (!id || id === "undefined") return; // Prevent navigating to /setup/undefined
+    if (!id || id === "undefined") return;
     router.replace(`/setup/${id}`);
+  };
+
+  const handleManage = (id: string) => {
+    if (!id || id === "undefined") return;
+    router.replace(`/vault/${id}`);
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -95,7 +99,15 @@ export default function SetupPage() {
               {chatbots.map((cb) => (
                 <li key={cb.id} className="flex items-center justify-between py-2">
                   <span>{cb.business_name}</span>
-                  <Button size="sm" onClick={() => handleSelect(cb.id)}>Setup</Button>
+                  {cb.setup_complete ? (
+                    <Button size="sm" onClick={() => handleManage(cb.id)}>
+                      Manage Knowledge
+                    </Button>
+                  ) : (
+                    <Button size="sm" onClick={() => handleSelect(cb.id)}>
+                      Setup
+                    </Button>
+                  )}
                 </li>
               ))}
             </ul>

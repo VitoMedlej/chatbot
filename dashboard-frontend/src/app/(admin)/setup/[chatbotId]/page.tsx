@@ -1,4 +1,4 @@
-// Chatbot Onboarding Stepper Page with page selection for scraping and skippable persona
+// Chatbot Onboarding Stepper Page. Step 2 now shows scraped pages or a message if none. Step 3 links to vault.
 
 "use client";
 import { useEffect, useState } from "react";
@@ -9,7 +9,6 @@ import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
 import { ChevronLeftIcon } from "@/icons";
 import PageSelectionStep from "./components/PageSelectionStep";
-
 
 type Step = 1 | 2 | 3;
 
@@ -45,7 +44,7 @@ export default function ChatbotSetupPage() {
       }
       if (data.setup_complete) {
         // Already setup, redirect to dashboard or chatbot details
-        router.replace(`/dashboard/${chatbotId}`);
+        router.replace(`/vault/${chatbotId}`);
         return;
       }
       setLoading(false);
@@ -136,7 +135,7 @@ export default function ChatbotSetupPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chatbotId }),
     });
-    setStep(3);
+    setStep(2);
   };
 
   // Ingest manual links
@@ -174,8 +173,8 @@ export default function ChatbotSetupPage() {
   };
 
   // Step 3: Done
-  const handleGoToDashboard = () => {
-    router.replace("/(admin)");
+  const handleGoToVault = () => {
+    router.replace(`/vault/${chatbotId}`);
   };
 
   const handleBack = () => {
@@ -213,34 +212,38 @@ export default function ChatbotSetupPage() {
           <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 3 ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-500"}`}>3</div>
         </div>
         {step === 1 && (
-      <PageSelectionStep
-    website={website}
-    setWebsite={setWebsite}
-    manualLinks={manualLinks}
-    setManualLinks={setManualLinks}
-    allPages={allPages}
-    selectedPages={selectedPages}
-    setSelectedPages={setSelectedPages}
-    loading={loading}
-    error={error}
-    handleFetchLinks={handleFetchLinks}
-    handlePageToggle={handlePageToggle}
-    handleCrawlSelected={handleCrawlSelected}
-    handleIngestManualLinks={handleIngestManualLinks}
-    setAllPages={setAllPages}
-    setLoading={setLoading}
-    setError={setError}
-  />
+          <PageSelectionStep
+            website={website}
+            setWebsite={setWebsite}
+            manualLinks={manualLinks}
+            setManualLinks={setManualLinks}
+            allPages={allPages}
+            selectedPages={selectedPages}
+            setSelectedPages={setSelectedPages}
+            loading={loading}
+            error={error}
+            handleFetchLinks={handleFetchLinks}
+            handlePageToggle={handlePageToggle}
+            handleCrawlSelected={handleCrawlSelected}
+            handleIngestManualLinks={handleIngestManualLinks}
+            setAllPages={setAllPages}
+            setLoading={setLoading}
+            setError={setError}
+          />
         )}
         {step === 2 && (
           <div className="space-y-6">
             <div>
               <Label>Scraped Pages</Label>
-              <ul className="list-disc ml-6 text-sm text-gray-700 dark:text-gray-300">
-                {scrapedPages.map((url, i) => (
-                  <li key={i}>{url}</li>
-                ))}
-              </ul>
+              {scrapedPages.length === 0 ? (
+                <div className="text-gray-500 text-sm">No pages ingested yet. Please crawl or ingest links.</div>
+              ) : (
+                <ul className="list-disc ml-6 text-sm text-gray-700 dark:text-gray-300">
+                  {scrapedPages.map((url, i) => (
+                    <li key={i}>{url}</li>
+                  ))}
+                </ul>
+              )}
             </div>
             <Button className="w-full" type="button" size="sm" onClick={() => setStep(3)}>
               Continue
@@ -250,8 +253,8 @@ export default function ChatbotSetupPage() {
         {step === 3 && (
           <div className="text-center space-y-6">
             <div className="text-green-600 text-lg font-semibold mb-4">Your chatbot is ready!</div>
-            <Button className="w-full" type="button" size="sm" onClick={handleGoToDashboard}>
-              Go to Dashboard
+            <Button className="w-full" type="button" size="sm" onClick={handleGoToVault}>
+              Go to Knowledge Vault
             </Button>
           </div>
         )}
