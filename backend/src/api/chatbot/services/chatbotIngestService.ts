@@ -39,7 +39,17 @@ export async function ingestText(req: Request): Promise<ServiceResponse<null>> {
                         const embedding = embeddingResponse.data[0].embedding;
 
                         // Ensure userId is a number (bigint)
-                        const numericUserId = typeof userId === 'number' ? userId : null; // Or handle the default case differently
+                        const numericUserId =
+                            typeof userId === 'number'
+                                ? userId
+                                : typeof userId === 'string' && !isNaN(Number(userId))
+                                    ? Number(userId)
+                                    : null;
+
+                        if (!numericUserId) {
+                            console.error('Missing or invalid userId for document_chunks insert');
+                            return;
+                        }
 
                         const { data: insertData, error: insertError } = await supabase
                             .from('document_chunks')
@@ -47,7 +57,7 @@ export async function ingestText(req: Request): Promise<ServiceResponse<null>> {
                                 content: chunk,
                                 embedding: embedding,
                                 chatbot_id: Number(chatbotId),
-                                user_id: numericUserId,
+                                user_id: numericUserId, // <--- Now always a valid number
                             })
                             .select();
 

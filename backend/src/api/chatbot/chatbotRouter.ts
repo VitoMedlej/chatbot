@@ -15,3 +15,5 @@ chatbotRouter.post("/extract-website", chatbotController.extractWebsiteInfoHandl
 chatbotRouter.post("/crawl-and-ingest", chatbotController.crawlAndIngestWebsiteHandler);
 chatbotRouter.post("/auto-generate-persona", chatbotController.autoGeneratePersonaHandler);
 chatbotRouter.post("/create", chatbotController.createChatbotHandler);
+chatbotRouter.get("/list", chatbotController.listUserChatbotsHandler);
+chatbotRouter.post("/upsert-default-persona", chatbotController.upsertDefaultPersonaHandler);

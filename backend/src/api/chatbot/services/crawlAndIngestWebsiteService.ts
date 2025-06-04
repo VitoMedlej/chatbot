@@ -13,9 +13,10 @@ export async function crawlAndIngestWebsiteJob(job: {
     url: string,
     chatbotId: string,
     userId: string,
-    fallbackUrls?: string[]
+    fallbackUrls?: string[],
+    selectedUrls?: string[]
 }): Promise<ServiceResponse<any>> {
-    const { url: rootUrl, chatbotId, userId, fallbackUrls } = job;
+    const { url: rootUrl, chatbotId, userId, fallbackUrls, selectedUrls } = job;
     if (!rootUrl || typeof rootUrl !== "string" || !chatbotId || !userId) {
         return ServiceResponse.failure("Missing or invalid URL or chatbotId or userId.", null, StatusCodes.BAD_REQUEST);
     }
@@ -27,80 +28,87 @@ export async function crawlAndIngestWebsiteJob(job: {
     let errors: any[] = [];
 
     try {
-        const baseUrl = new URL(rootUrl);
+        let urlsToProcess: string[] = [];
+        const baseUrl = rootUrl;
 
-        // --- Step 1: Find and Parse Sitemap ---
-        let sitemapUrls: string[] = [];
-        let urlsFromSitemap: string[] = [];
-        try {
-            const robotsTxtUrl = new URL("/robots.txt", baseUrl).href;
-            const robotsTxtRes = await fetch(robotsTxtUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
-            if (robotsTxtRes.ok) {
-                const robotsTxt = await robotsTxtRes.text();
-                const sitemapLines = robotsTxt.split("\n").filter(line => line.toLowerCase().startsWith("sitemap:"));
-                if (sitemapLines.length > 0) {
-                    sitemapUrls = sitemapLines.map(line => line.substring("sitemap:".length).trim());
+        // If user selected URLs, use only those
+        if (Array.isArray(selectedUrls) && selectedUrls.length > 0) {
+            urlsToProcess = selectedUrls;
+            urlsToProcess.forEach(u => crawledUrls.add(u));
+        } else {
+            // --- Step 1: Find and Parse Sitemap ---
+            let sitemapUrls: string[] = [];
+            let urlsFromSitemap: string[] = [];
+            try {
+                const robotsTxtUrl = new URL("/robots.txt", baseUrl).href;
+                const robotsTxtRes = await fetch(robotsTxtUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
+                if (robotsTxtRes.ok) {
+                    const robotsTxt = await robotsTxtRes.text();
+                    const sitemapLines = robotsTxt.split("\n").filter(line => line.toLowerCase().startsWith("sitemap:"));
+                    if (sitemapLines.length > 0) {
+                        sitemapUrls = sitemapLines.map(line => line.substring("sitemap:".length).trim());
+                    }
                 }
-            }
-            if (sitemapUrls.length === 0) {
-                sitemapUrls.push(new URL("/sitemap.xml", baseUrl).href);
-            }
-            for (const sUrl of sitemapUrls) {
-                await delay(500);
-                try {
-                    const sitemapRes = await fetch(sUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
-                    if (sitemapRes.ok) {
-                        const sitemapXml = await sitemapRes.text();
-                        const parsedSitemap = await parseStringPromise(sitemapXml);
-                        if (parsedSitemap.sitemapindex && parsedSitemap.sitemapindex.sitemap) {
-                            for (const s of parsedSitemap.sitemapindex.sitemap) {
-                                if (s.loc && s.loc[0]) sitemapUrls.push(s.loc[0]);
-                            }
-                        } else if (parsedSitemap.urlset && parsedSitemap.urlset.url) {
-                            for (const u of parsedSitemap.urlset.url) {
-                                if (u.loc && u.loc[0]) urlsFromSitemap.push(u.loc[0]);
+                if (sitemapUrls.length === 0) {
+                    sitemapUrls.push(new URL("/sitemap.xml", baseUrl).href);
+                }
+                for (const sUrl of sitemapUrls) {
+                    await delay(500);
+                    try {
+                        const sitemapRes = await fetch(sUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
+                        if (sitemapRes.ok) {
+                            const sitemapXml = await sitemapRes.text();
+                            const parsedSitemap = await parseStringPromise(sitemapXml);
+                            if (parsedSitemap.sitemapindex && parsedSitemap.sitemapindex.sitemap) {
+                                for (const s of parsedSitemap.sitemapindex.sitemap) {
+                                    if (s.loc && s.loc[0]) sitemapUrls.push(s.loc[0]);
+                                }
+                            } else if (parsedSitemap.urlset && parsedSitemap.urlset.url) {
+                                for (const u of parsedSitemap.urlset.url) {
+                                    if (u.loc && u.loc[0]) urlsFromSitemap.push(u.loc[0]);
+                                }
                             }
                         }
+                    } catch (err: any) {
+                        errors.push({ type: "sitemap", url: sUrl, error: err.message || err });
                     }
-                } catch (err: any) {
-                    errors.push({ type: "sitemap", url: sUrl, error: err.message || err });
                 }
-            }
-            urlsFromSitemap = Array.from(new Set(urlsFromSitemap));
-            if (urlsFromSitemap.length > 0) {
-                crawledUrls.add(rootUrl);
-                urlsFromSitemap.forEach(u => crawledUrls.add(u));
-            }
-        } catch (err: any) {
-            errors.push({ type: "sitemap", url: rootUrl, error: err.message || err });
-        }
-
-        // --- Fallback: If no URLs found, try homepage links ---
-        if (crawledUrls.size === 0) {
-            try {
-                const homeRes = await fetch(rootUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
-                if (homeRes.ok) {
-                    const homeHtml = await homeRes.text();
-                    const homeDom = new JSDOM(homeHtml, { url: rootUrl });
-                    const anchors = Array.from(homeDom.window.document.querySelectorAll("a"));
-                    const base = new URL(rootUrl);
-                    const links = anchors
-                        .map(a => a.href ? new URL(a.href, base).href : "")
-                        .filter(href => href.startsWith("http") && href.includes(base.hostname));
+                urlsFromSitemap = Array.from(new Set(urlsFromSitemap));
+                if (urlsFromSitemap.length > 0) {
                     crawledUrls.add(rootUrl);
-                    links.forEach(l => crawledUrls.add(l));
+                    urlsFromSitemap.forEach(u => crawledUrls.add(u));
                 }
             } catch (err: any) {
-                errors.push({ type: "homepage", url: rootUrl, error: err.message || err });
+                errors.push({ type: "sitemap", url: rootUrl, error: err.message || err });
+            }
+
+            // --- Fallback: If no URLs found, try homepage links ---
+            if (crawledUrls.size === 0) {
+                try {
+                    const homeRes = await fetch(rootUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
+                    if (homeRes.ok) {
+                        const homeHtml = await homeRes.text();
+                        const homeDom = new JSDOM(homeHtml, { url: rootUrl });
+                        const anchors = Array.from(homeDom.window.document.querySelectorAll("a"));
+                        const base = new URL(rootUrl);
+                        const links = anchors
+                            .map(a => a.href ? new URL(a.href, base).href : "")
+                            .filter(href => href.startsWith("http") && href.includes(base.hostname));
+                        crawledUrls.add(rootUrl);
+                        links.forEach(l => crawledUrls.add(l));
+                    }
+                } catch (err: any) {
+                    errors.push({ type: "homepage", url: rootUrl, error: err.message || err });
+                }
+            }
+
+            // --- Fallback: If still no URLs, use fallbackUrls from user ---
+            if (crawledUrls.size === 0 && Array.isArray(fallbackUrls) && fallbackUrls.length > 0) {
+                fallbackUrls.forEach(u => crawledUrls.add(u));
             }
         }
 
-        // --- Fallback: If still no URLs, use fallbackUrls from user ---
-        if (crawledUrls.size === 0 && Array.isArray(fallbackUrls) && fallbackUrls.length > 0) {
-            fallbackUrls.forEach(u => crawledUrls.add(u));
-        }
-
-        if (crawledUrls.size === 0) {
+        if (urlsToProcess.length === 0) {
             return ServiceResponse.failure(
                 "No URLs found to crawl. Please provide a list of URLs to crawl.",
                 { askForUrls: true, errors },
@@ -109,8 +117,6 @@ export async function crawlAndIngestWebsiteJob(job: {
         }
 
         // --- Step 2: Process Each Unique URL ---
-        const urlsToProcess = Array.from(crawledUrls);
-
         for (const pageUrl of urlsToProcess) {
             await delay(500);
             try {

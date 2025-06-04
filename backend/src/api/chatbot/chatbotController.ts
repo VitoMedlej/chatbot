@@ -8,11 +8,10 @@ import { listChunks } from "./services/chatbotListService"; // Import the new se
 import { chatWithContext } from "./services/chatbotContextService";
 import { extractWebsiteInfo } from "./services/websiteExtractService";
 import { getAllLinksService, getSitemapLinksService } from "./services/websiteCrawlService";
-import { Request, ParamsDictionary } from "express-serve-static-core";
-import { ParsedQs } from "qs";
 import { crawlAndIngestWebsiteJob } from "./services/crawlAndIngestWebsiteService";
-import { autoGeneratePersona } from "./services/autoGeneratePersonaService";
+import { autoGeneratePersona, upsertDefaultPersona } from "./services/autoGeneratePersonaService";
 import { createChatbotService } from "./services/chatbotCreateService";
+import { listUserChatbots } from "./services/listChatbotsService";
 
 class ChatbotController {
     directQuestionAnswer: RequestHandler = async (req, res) => {
@@ -65,7 +64,8 @@ class ChatbotController {
             url: req.body.url,
             chatbotId: req.body.chatbotId,
             userId: req.body.userId,
-            fallbackUrls: req.body.fallbackUrls
+            fallbackUrls: req.body.fallbackUrls,
+            selectedUrls: req.body.selectedUrls // <-- add this
         });
         return handleServiceResponse(serviceResponse, res);
     };
@@ -77,6 +77,17 @@ class ChatbotController {
 
     createChatbotHandler: RequestHandler = async (req, res) => {
         const serviceResponse = await createChatbotService(req);
+        return handleServiceResponse(serviceResponse, res);
+    };
+
+    listUserChatbotsHandler: RequestHandler = async (req, res) => {
+        const serviceResponse = await listUserChatbots(req);
+        return handleServiceResponse(serviceResponse, res);
+    };
+
+    upsertDefaultPersonaHandler: RequestHandler = async (req, res) => {
+        const { chatbotId, businessName } = req.body;
+        const serviceResponse = await upsertDefaultPersona(chatbotId, businessName);
         return handleServiceResponse(serviceResponse, res);
     };
 }
