@@ -9,7 +9,7 @@ import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
 import { ChevronLeftIcon } from "@/icons";
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2 | 3;
 
 export default function ChatbotSetupPage() {
   const router = useRouter();
@@ -18,23 +18,41 @@ export default function ChatbotSetupPage() {
 
   const [step, setStep] = useState<Step>(1);
   const [website, setWebsite] = useState("");
-  const [persona, setPersona] = useState<{ business_name?: string; persona?: string; instructions?: string } | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [allPages, setAllPages] = useState<string[]>([]);
   const [selectedPages, setSelectedPages] = useState<string[]>([]);
   const [scrapedPages, setScrapedPages] = useState<string[]>([]);
 
   useEffect(() => {
-    const fetchPersonaAndChunks = async () => {
-      setLoading(true);
-      const { data: personaData } = await supabase
+    async function checkSetup() {
+      if (!chatbotId) {
+        router.replace("/(admin)");
+        return;
+      }
+      // Fetch chatbot info
+      const { data } = await supabase
         .from("chatbots")
-        .select("business_name,persona,instructions")
+        .select("id,setup_complete")
         .eq("id", chatbotId)
         .single();
-      if (personaData) setPersona(personaData);
+      if (!data) {
+        router.replace("/(admin)");
+        return;
+      }
+      if (data.setup_complete) {
+        // Already setup, redirect to dashboard or chatbot details
+        router.replace(`/dashboard/${chatbotId}`);
+        return;
+      }
+      setLoading(false);
+    }
+    checkSetup();
+  }, [chatbotId, router]);
 
+  useEffect(() => {
+    const fetchChunks = async () => {
+      setLoading(true);
       const res = await fetch(`http://localhost:8080/api/chatbot/list-chunks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -51,7 +69,7 @@ export default function ChatbotSetupPage() {
       }
       setLoading(false);
     };
-    if (chatbotId && chatbotId !== "undefined") fetchPersonaAndChunks();
+    if (chatbotId && chatbotId !== "undefined") fetchChunks();
   }, [chatbotId]);
 
   // Step 1: Enter website and fetch links for selection
@@ -109,78 +127,16 @@ export default function ChatbotSetupPage() {
     if (result.responseObject?.crawledUrls) {
       setScrapedPages(result.responseObject.crawledUrls);
     }
-    setStep(2);
-  };
-
-  // Step 2: Generate persona (skippable)
-  const handleGeneratePersona = async () => {
-    setError(null);
-    setLoading(true);
-    const res = await fetch("http://localhost:8080/api/chatbot/auto-generate-persona", {
+    // Auto-generate persona after ingestion
+    await fetch("http://localhost:8080/api/chatbot/auto-generate-persona", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chatbotId }),
     });
-    const result = await res.json();
-    setLoading(false);
-    if (!res.ok) {
-      setError(result.message || "Failed to generate persona.");
-      return;
-    }
-    setPersona(result.responseObject);
     setStep(3);
   };
 
-  // Step 2: Skip persona (use default)
-  const handleSkipPersona = async () => {
-    setError(null);
-    setLoading(true);
-    // Try to get website title from scrapedPages or fallback to generic
-    let businessName = "Your Business";
-    if (scrapedPages.length > 0) {
-      try {
-        const url = scrapedPages[0];
-        const res = await fetch("http://localhost:8080/api/chatbot/extract-title", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url }),
-        });
-        const result = await res.json();
-        if (result?.responseObject?.title) {
-          businessName = result.responseObject.title;
-        }
-      } catch {}
-    }
-    setPersona({
-      business_name: businessName,
-      persona: `You are the helpful assistant for ${businessName}.`,
-      instructions:
-        "Be concise and helpful. Never say you are ChatGPT. Always answer as a representative of the business. If you don't know, suggest contacting support.",
-    });
-    setLoading(false);
-    setStep(3);
-  };
-
-  // Step 3: Review & edit persona
-  const handleSavePersona = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setLoading(true);
-    const res = await fetch("http://localhost:8080/api/chatbot/update-persona", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chatbotId, ...persona }),
-    });
-    const result = await res.json();
-    setLoading(false);
-    if (!res.ok) {
-      setError(result.message || "Failed to save persona.");
-      return;
-    }
-    setStep(4);
-  };
-
-  // Step 4: Done
+  // Step 3: Done
   const handleGoToDashboard = () => {
     router.replace("/(admin)");
   };
@@ -188,6 +144,8 @@ export default function ChatbotSetupPage() {
   const handleBack = () => {
     router.replace("/setup");
   };
+
+  if (loading) return <div className="p-8 text-center">Loading...</div>;
 
   if (!chatbotId || chatbotId === "undefined") {
     return <div className="p-8 text-center text-red-500">Invalid chatbot ID.</div>;
@@ -213,9 +171,7 @@ export default function ChatbotSetupPage() {
           <div className={`h-1 w-8 ${step > 1 ? "bg-blue-600" : "bg-gray-200"}`}></div>
           <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 2 ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-500"}`}>2</div>
           <div className={`h-1 w-8 ${step > 2 ? "bg-blue-600" : "bg-gray-200"}`}></div>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 3 ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-500"}`}>3</div>
-          <div className={`h-1 w-8 ${step > 3 ? "bg-blue-600" : "bg-gray-200"}`}></div>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 4 ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-500"}`}>4</div>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step === 3 ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-500"}`}>3</div>
         </div>
         {step === 1 && (
           <>
@@ -267,69 +223,19 @@ export default function ChatbotSetupPage() {
         {step === 2 && (
           <div className="space-y-6">
             <div>
-              <Label>Persona & Instructions</Label>
-              <div className="text-gray-700 dark:text-gray-300 mb-2">
-                You can auto-generate a persona, or skip and use a default persona.
-              </div>
+              <Label>Scraped Pages</Label>
+              <ul className="list-disc ml-6 text-sm text-gray-700 dark:text-gray-300">
+                {scrapedPages.map((url, i) => (
+                  <li key={i}>{url}</li>
+                ))}
+              </ul>
             </div>
-            {scrapedPages.length > 0 && (
-              <div className="mb-4">
-                <Label>Scraped Pages</Label>
-                <ul className="list-disc ml-6 text-sm text-gray-700 dark:text-gray-300">
-                  {scrapedPages.map((url, i) => (
-                    <li key={i}>{url}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {error && <div className="text-red-500">{error}</div>}
-            <div className="flex gap-2">
-              <Button className="w-full" type="button" size="sm" disabled={loading} onClick={handleGeneratePersona}>
-                {loading ? "Generating..." : "Auto-Generate Persona"}
-              </Button>
-              <Button className="w-full" type="button" size="sm" disabled={loading} onClick={handleSkipPersona} variant="outline">
-                {loading ? "..." : "Skip"}
-              </Button>
-            </div>
+            <Button className="w-full" type="button" size="sm" onClick={() => setStep(3)}>
+              Continue
+            </Button>
           </div>
         )}
-        {step === 3 && persona && (
-          <form onSubmit={handleSavePersona} className="space-y-6">
-            <div>
-              <Label>Business Name</Label>
-              <Input
-                type="text"
-                value={persona.business_name || ""}
-                onChange={e => setPersona({ ...persona, business_name: e.target.value })}
-                required
-              />
-            </div>
-            <div>
-              <Label>Persona</Label>
-              <Input
-                type="text"
-                value={persona.persona || ""}
-                onChange={e => setPersona({ ...persona, persona: e.target.value })}
-                required
-              />
-            </div>
-            <div>
-              <Label>Instructions</Label>
-              <textarea
-                className="w-full border px-3 py-2 rounded"
-                value={persona.instructions || ""}
-                onChange={e => setPersona({ ...persona, instructions: e.target.value })}
-                required
-                rows={4}
-              />
-            </div>
-            {error && <div className="text-red-500">{error}</div>}
-            <Button className="w-full" type="submit" size="sm" disabled={loading}>
-              {loading ? "Saving..." : "Save Persona & Finish"}
-            </Button>
-          </form>
-        )}
-        {step === 4 && (
+        {step === 3 && (
           <div className="text-center space-y-6">
             <div className="text-green-600 text-lg font-semibold mb-4">Your chatbot is ready!</div>
             <Button className="w-full" type="button" size="sm" onClick={handleGoToDashboard}>

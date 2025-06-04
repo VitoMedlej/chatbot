@@ -20,7 +20,8 @@ export async function upsertDefaultPersona(chatbotId: string, businessName: stri
         id: chatbotId,
         business_name: personaObj.business_name,
         persona: personaObj.persona,
-        instructions: personaObj.instructions
+        instructions: personaObj.instructions,
+        setup_complete: true
     });
     if (upsertError) {
         return ServiceResponse.failure("Failed to upsert default persona.", null, StatusCodes.INTERNAL_SERVER_ERROR);
@@ -36,15 +37,12 @@ export async function autoGeneratePersona(req: any): Promise<ServiceResponse<any
     if (!chatbotId) {
         return ServiceResponse.failure("Missing chatbotId.", null, StatusCodes.BAD_REQUEST);
     }
-
-    // Get the first 5 chunks for this chatbot (no source_url filter)
     const { data: chunks, error } = await supabase
         .from("document_chunks")
         .select("content")
         .eq("chatbot_id", chatbotId)
         .limit(5);
 
-    // If no content, upsert default persona using businessName or fallback
     if (error || !chunks || chunks.length === 0) {
         const fallbackName = businessName || "Your Business";
         return upsertDefaultPersona(chatbotId, fallbackName);
@@ -52,7 +50,6 @@ export async function autoGeneratePersona(req: any): Promise<ServiceResponse<any
 
     const combined = chunks.map(c => c.content).join("\n\n").slice(0, 1000);
 
-    // Use OpenAI to generate business_name, persona, instructions
     const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
@@ -85,16 +82,16 @@ Respond in JSON:
         const match = `${text}`.match(/```json\s*([\s\S]*?)\s*```/i) || `${text}`.match(/```([\s\S]*?)\s*```/i);
         const jsonBlock = match ? match[1] : `${text}`.slice(`${text}`.indexOf("{"));
         personaObj = JSON.parse(jsonBlock || "");
-    } catch (err) {
+    } catch {
         return ServiceResponse.failure("Failed to parse persona JSON.", { raw: text }, StatusCodes.INTERNAL_SERVER_ERROR);
     }
 
-    // Save to chatbots table (int8 id)
     const { error: upsertError } = await supabase.from("chatbots").upsert({
         id: chatbotId,
         business_name: personaObj.business_name,
         persona: personaObj.persona,
-        instructions: personaObj.instructions
+        instructions: personaObj.instructions,
+        setup_complete: true
     });
 
     if (upsertError) {

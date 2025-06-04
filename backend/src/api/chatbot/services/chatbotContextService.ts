@@ -3,19 +3,25 @@ import { StatusCodes } from "http-status-codes";
 import { supabase, openai } from "@/server";
 
 export async function chatWithContext(req: any): Promise<ServiceResponse<null | string>> {
+    console.log("chatWithContext called", JSON.stringify(req.body));
     try {
         const { userId, chatbotId, message } = req.body;
         if (!userId || !chatbotId || !message) {
+            console.error("Missing userId, chatbotId, or message", { userId, chatbotId, message });
             return ServiceResponse.failure("Missing userId, chatbotId, or message.", null, StatusCodes.BAD_REQUEST);
         }
 
         // Save user message
-        await supabase.from("chat_history").insert({
+        const { error: insertUserMsgError } = await supabase.from("chat_history").insert({
             user_id: userId,
             chatbot_id: chatbotId,
             message,
             sender: "user",
         });
+        if (insertUserMsgError) {
+            console.error("Failed to insert user message", insertUserMsgError);
+            return ServiceResponse.failure("Failed to save user message.", null, StatusCodes.INTERNAL_SERVER_ERROR);
+        }
 
         // Fetch recent chat history (last 10)
         const { data: history, error: historyError } = await supabase
@@ -27,15 +33,22 @@ export async function chatWithContext(req: any): Promise<ServiceResponse<null | 
             .limit(10);
 
         if (historyError) {
+            console.error("Failed to fetch chat history", historyError);
             return ServiceResponse.failure("Failed to fetch chat history.", null, StatusCodes.INTERNAL_SERVER_ERROR);
         }
 
         // VECTOR SEARCH: retrieve relevant chunks
-        const embeddingResponse = await openai.embeddings.create({
-            model: "text-embedding-3-small",
-            input: message,
-        });
-        const embedding = embeddingResponse.data[0].embedding;
+        let embedding;
+        try {
+            const embeddingResponse = await openai.embeddings.create({
+                model: "text-embedding-3-small",
+                input: message,
+            });
+            embedding = embeddingResponse.data[0].embedding;
+        } catch (embedErr: any) {
+            console.error("OpenAI embedding error", embedErr);
+            return ServiceResponse.failure("Failed to generate embedding.", null, StatusCodes.INTERNAL_SERVER_ERROR);
+        }
 
         const { data: chunks, error: chunkError } = await supabase.rpc("match_document_chunks", {
             query_embedding: embedding,
@@ -45,6 +58,7 @@ export async function chatWithContext(req: any): Promise<ServiceResponse<null | 
         });
 
         if (chunkError) {
+            console.error("Failed to retrieve knowledge base context", chunkError);
             return ServiceResponse.failure("Failed to retrieve knowledge base context.", null, StatusCodes.INTERNAL_SERVER_ERROR);
         }
 
@@ -56,6 +70,7 @@ export async function chatWithContext(req: any): Promise<ServiceResponse<null | 
             .single();
 
         if (chatbotInfoError) {
+            console.error("Failed to fetch chatbot info", chatbotInfoError);
             return ServiceResponse.failure("Failed to fetch chatbot info.", null, StatusCodes.INTERNAL_SERVER_ERROR);
         }
 
@@ -88,28 +103,39 @@ export async function chatWithContext(req: any): Promise<ServiceResponse<null | 
         const userPrompt = `${chatHistory}\n${knowledgeContext}\nBot:`;
 
         // Call OpenAI
-        const llmResponse = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: userPrompt }
-            ],
-            max_tokens: 512,
-            temperature: 0.2,
-        });
-        const botReply = llmResponse.choices[0].message.content;
+        let botReply = "";
+        try {
+            const llmResponse = await openai.chat.completions.create({
+                model: "gpt-4o-mini",
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: userPrompt }
+                ],
+                max_tokens: 512,
+                temperature: 0.2,
+            });
+            botReply = llmResponse.choices[0].message.content;
+        } catch (llmErr: any) {
+            console.error("OpenAI chat completion error", llmErr);
+            return ServiceResponse.failure("Failed to generate bot reply.", null, StatusCodes.INTERNAL_SERVER_ERROR);
+        }
 
         // Save bot reply
-        await supabase.from("chat_history").insert({
+        const { error: insertBotMsgError } = await supabase.from("chat_history").insert({
             user_id: userId,
             chatbot_id: chatbotId,
             message: botReply,
             sender: "bot",
         });
+        if (insertBotMsgError) {
+            console.error("Failed to insert bot reply", insertBotMsgError);
+            return ServiceResponse.failure("Failed to save bot reply.", null, StatusCodes.INTERNAL_SERVER_ERROR);
+        }
 
+        console.log("Bot reply generated successfully");
         return ServiceResponse.success("Bot reply generated.", botReply);
     } catch (err: any) {
-        console.log('err: ', err);
+        console.error("Unhandled error in chatWithContext", err);
         return ServiceResponse.failure("Internal server error.", null, StatusCodes.INTERNAL_SERVER_ERROR);
     }
 }

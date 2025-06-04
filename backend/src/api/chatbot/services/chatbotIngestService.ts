@@ -1,3 +1,5 @@
+// Accepts user_id as UUID (string) or number, and inserts it as-is into document_chunks
+
 import { Request } from "express";
 import { ServiceResponse } from "@/common/models/serviceResponse";
 import { StatusCodes } from "http-status-codes";
@@ -9,25 +11,32 @@ export async function ingestText(req: Request): Promise<ServiceResponse<null>> {
         const { text, chatbotId, userId } = req.body;
 
         if (!text || !chatbotId || !userId) {
-            return ServiceResponse.failure("Missing text or chatbot id in request body.", null, StatusCodes.BAD_REQUEST);
+            return ServiceResponse.failure("Missing text, chatbot id, or user id in request body.", null, StatusCodes.BAD_REQUEST);
         }
 
-        // Log the chatbotId to ensure it's being passed correctly
+        // Accept userId as string (UUID) or number, and insert as-is
+        const validUserId =
+            (typeof userId === "string" && userId.length >= 8) || typeof userId === "number"
+                ? userId
+                : null;
+
+        if (!validUserId) {
+            console.error('Missing or invalid userId for document_chunks insert', { userId });
+            return ServiceResponse.failure('Missing or invalid userId for document_chunks insert', null, StatusCodes.BAD_REQUEST);
+        }
+
         console.log(`[ingestText] chatbotId: ${chatbotId}`);
+        console.log(`[ingestText] userId: ${userId}`);
 
         const chunks = chunkText(text);
-
-        // Log the length of the chunks array
         console.log(`[ingestText] Number of chunks: ${chunks.length}`);
 
         const embeddingPromises: Promise<any>[] = [];
         let openaiQuotaExceeded = false;
 
-        for (const [idx, chunk] of chunks.entries()) {
+        for (const chunk of chunks) {
             if (chunk.length === 0) continue;
-            if (openaiQuotaExceeded) {
-                break;
-            }
+            if (openaiQuotaExceeded) break;
 
             embeddingPromises.push(
                 (async () => {
@@ -38,32 +47,17 @@ export async function ingestText(req: Request): Promise<ServiceResponse<null>> {
                         });
                         const embedding = embeddingResponse.data[0].embedding;
 
-                        // Ensure userId is a number (bigint)
-                        const numericUserId =
-                            typeof userId === 'number'
-                                ? userId
-                                : typeof userId === 'string' && !isNaN(Number(userId))
-                                    ? Number(userId)
-                                    : null;
-
-                        if (!numericUserId) {
-                            console.error('Missing or invalid userId for document_chunks insert');
-                            return;
-                        }
-
-                        const { data: insertData, error: insertError } = await supabase
+                        const { error: insertError } = await supabase
                             .from('document_chunks')
                             .insert({
                                 content: chunk,
                                 embedding: embedding,
-                                chatbot_id: Number(chatbotId),
-                                user_id: numericUserId, // <--- Now always a valid number
-                            })
-                            .select();
+                                chatbot_id: chatbotId,
+                                user_id: validUserId, // <-- Insert as string or number, do NOT cast
+                            });
 
                         if (insertError) {
                             console.error('Supabase insert error: ' + insertError.message, insertError);
-                            console.error('Supabase insert error details:', insertError); // Log the full error object
                         }
                     } catch (embedOrInsertError: any) {
                         if (

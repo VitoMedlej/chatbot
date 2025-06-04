@@ -1,5 +1,7 @@
 import { ServiceResponse } from "@/common/models/serviceResponse";
+import { StatusCodes } from "http-status-codes";
 import { supabase } from "@/server";
+import { autoGeneratePersona } from "./autoGeneratePersonaService";
 
 
 
@@ -47,7 +49,10 @@ export async function createChatbotService(req: any): Promise<ServiceResponse<an
             return ServiceResponse.failure("Failed to create chatbot. No ID returned.", null);
         }
 
-        return ServiceResponse.success("Chatbot created successfully.", { id: data.id });
+        // After chatbot creation, scraping, and ingestion, auto-generate persona automatically
+        await autoGeneratePersona({ body: { chatbotId: data.id, businessName: business_name } });
+
+        return ServiceResponse.success("Chatbot created and persona auto-generated.", { id: data.id });
     } catch (err: any) {
         return ServiceResponse.failure("Unexpected error: " + (err?.message || "Unknown error"), err);
     }
