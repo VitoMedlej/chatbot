@@ -13,6 +13,8 @@ import { autoGeneratePersona, upsertDefaultPersona } from "./services/autoGenera
 import { createChatbotService } from "./services/chatbotCreateService";
 import { listUserChatbots } from "./services/listChatbotsService";
 import { ingestManualLinks } from "./services/manualLinksService";
+import { uploadFile } from "./services/fileUploadService";
+import { generateQuestions } from "./services/generateQuestionsService"; // Import the new service
 
 
 class ChatbotController {
@@ -95,6 +97,17 @@ class ChatbotController {
 
     ingestManualLinksHandler: RequestHandler = async (req, res) => {
         const serviceResponse = await ingestManualLinks(req);
+        return handleServiceResponse(serviceResponse, res);
+    };
+
+    uploadFileHandler: RequestHandler = async (req, res) => {
+        const serviceResponse = await uploadFile(req);
+        return handleServiceResponse(serviceResponse, res);
+    };
+
+    generateQuestionsHandler: RequestHandler = async (req, res) => {
+        const { chatbotId } = req.body;
+        const serviceResponse = await generateQuestions(chatbotId);
         return handleServiceResponse(serviceResponse, res);
     };
 }

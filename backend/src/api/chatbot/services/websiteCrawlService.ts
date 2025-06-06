@@ -127,9 +127,11 @@ export async function getSitemapLinksService(req: any): Promise<ServiceResponse<
 // Function to insert document chunk into the database
 export async function insertDocumentChunk(chatbotId: string, chunkText: string, embedding: number[], url: string, pageTitle: string, linksArray: string[]) {
     try {
+        const sanitizedChunkText = chunkText.replace(/[^a-zA-Z0-9\s]/g, "").trim();
+
         await supabase.from('document_chunks').insert({
             chatbot_id: chatbotId,
-            content: String(chunkText), // Always save as string
+            content: sanitizedChunkText, // Save sanitized and meaningful text
             embedding: embedding, // Always array of floats
             source_url: url,
             title: pageTitle,

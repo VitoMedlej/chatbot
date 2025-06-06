@@ -135,8 +135,36 @@ export default function KnowledgeVaultPage() {
     if (!file) return;
     setFileLoading(true);
     setError(null);
-    // TODO: Implement backend endpoint for PDF/CSV ingestion
-    setFileLoading(false);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("chatbotId", chatbotId);
+
+      const res = await fetch("http://localhost:8080/api/chatbot/upload-file", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await res.json();
+      setFileLoading(false);
+
+      if (!res.ok) {
+        setError(result.message || "Failed to upload file.");
+        return;
+      }
+
+      // Refresh sources
+      const { data: srcs } = await supabase
+        .from("chatbot_knowledge")
+        .select("*")
+        .eq("chatbot_id", chatbotId)
+        .order("created_at", { ascending: false });
+      setSources(srcs || []);
+    } catch (err) {
+      setFileLoading(false);
+      setError("An error occurred while uploading the file.");
+    }
   };
 
   // Delete source
@@ -240,7 +268,7 @@ export default function KnowledgeVaultPage() {
                   {src.title || src.source_name || src.source_type}
                 </span>
                 <Button
-                  size="xs"
+                  // size="xs"
                   variant="outline"
                   className="ml-2"
                   onClick={() => handleDeleteSource(src.id)}

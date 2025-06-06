@@ -1,5 +1,8 @@
 import express from "express";
+import multer from "multer";
 import { chatbotController } from "./chatbotController";
+
+const upload = multer({ dest: "uploads/" });
 
 export const chatbotRouter = express.Router();
 
@@ -18,3 +21,5 @@ chatbotRouter.post("/create", chatbotController.createChatbotHandler);
 chatbotRouter.get("/list", chatbotController.listUserChatbotsHandler);
 chatbotRouter.post("/upsert-default-persona", chatbotController.upsertDefaultPersonaHandler);
 chatbotRouter.post("/manual-links", chatbotController.ingestManualLinksHandler);
+chatbotRouter.post("/upload-file", upload.single("file"), chatbotController.uploadFileHandler);
+chatbotRouter.post("/generate-questions", chatbotController.generateQuestionsHandler);
