@@ -6,11 +6,13 @@ import { useRouter, useParams } from "next/navigation";
 import Button from "@/components/ui/button/Button";
 import Input from "@/components/form/input/InputField";
 import { supabase } from "@/lib/supabase";
+import KnowledgeCheck from "@/components/KnowledgeCheck";
 
 export default function ChatbotPlaygroundPage() {
   const router = useRouter();
   const params = useParams();
   const chatbotId = params?.chatbotId as string;
+  console.log('chatbotId: ', chatbotId);
 
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
   const [input, setInput] = useState("");
@@ -64,6 +66,7 @@ export default function ChatbotPlaygroundPage() {
 
   return (
     <div className="max-w-2xl mx-auto mt-10 mb-10">
+      <KnowledgeCheck chatbotId={chatbotId} />
       <div className="rounded-2xl border border-gray-200 bg-white p-8 dark:border-gray-800 dark:bg-white/[0.03] shadow-theme-md">
         <h1 className="text-2xl font-bold mb-2">Chatbot Playground</h1>
         <div className="h-80 overflow-y-auto border rounded p-4 bg-gray-50 dark:bg-gray-900 mb-4">

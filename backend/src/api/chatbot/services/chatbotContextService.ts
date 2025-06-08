@@ -5,36 +5,50 @@ import { supabase, openai } from "@/server";
 export async function chatWithContext(req: any): Promise<ServiceResponse<null | string>> {
     console.log("chatWithContext called", JSON.stringify(req.body));
     try {
-        const { userId, chatbotId, message } = req.body;
-        if (!userId || !chatbotId || !message) {
-            console.error("Missing userId, chatbotId, or message", { userId, chatbotId, message });
-            return ServiceResponse.failure("Missing userId, chatbotId, or message.", null, StatusCodes.BAD_REQUEST);
+        let { userId, chatbotId, message } = req.body;
+        console.log('chatbotId: ', chatbotId);
+        chatbotId = Number(chatbotId); // Ensure chatbotId is a number
+
+
+        // Validate chatbotId as a UUID
+        if (!chatbotId) {
+            return ServiceResponse.failure("Invalid chatbotId. Must be a valid UUID.", null, 400);
+        }
+
+        if (!userId || !message) {
+            return ServiceResponse.failure("Missing required fields.", null, 400);
+        }
+
+        // Ensure chatbotId is a number
+        const numericChatbotId = Number(chatbotId);
+        if (isNaN(numericChatbotId)) {
+            return ServiceResponse.failure("Invalid chatbotId. Must be a valid number.", null, 400);
         }
 
         // Save user message
         const { error: insertUserMsgError } = await supabase.from("chat_history").insert({
             user_id: userId,
-            chatbot_id: chatbotId,
+            chatbot_id: numericChatbotId,
             message,
             sender: "user",
         });
         if (insertUserMsgError) {
-            console.error("Failed to insert user message", insertUserMsgError);
-            return ServiceResponse.failure("Failed to save user message.", null, StatusCodes.INTERNAL_SERVER_ERROR);
+            console.error("Error inserting user message:", insertUserMsgError);
+            return ServiceResponse.failure("Failed to save user message.", null, 500);
         }
 
         // Fetch recent chat history (last 10)
-        const { data: history, error: historyError } = await supabase
+        const { data: history, error: fetchHistoryError } = await supabase
             .from("chat_history")
             .select("message,sender")
             .eq("user_id", userId)
-            .eq("chatbot_id", chatbotId)
+            .eq("chatbot_id", numericChatbotId)
             .order("created_at", { ascending: false })
             .limit(10);
 
-        if (historyError) {
-            console.error("Failed to fetch chat history", historyError);
-            return ServiceResponse.failure("Failed to fetch chat history.", null, StatusCodes.INTERNAL_SERVER_ERROR);
+        if (fetchHistoryError) {
+            console.error("Error fetching chat history:", fetchHistoryError);
+            return ServiceResponse.failure("Failed to retrieve chat history.", null, 500);
         }
 
         // VECTOR SEARCH: retrieve relevant chunks
@@ -50,11 +64,14 @@ export async function chatWithContext(req: any): Promise<ServiceResponse<null | 
             return ServiceResponse.failure("Failed to generate embedding.", null, StatusCodes.INTERNAL_SERVER_ERROR);
         }
 
+        console.log("Embedding generated:", embedding);
+        console.log("Casting chatbotId to UUID for document_chunks table:", numericChatbotId);
+
         const { data: chunks, error: chunkError } = await supabase.rpc("match_document_chunks", {
             query_embedding: embedding,
             match_threshold: 0.75,
             match_count: 3,
-            chatbot_id: chatbotId,
+            chatbot_id: numericChatbotId.toString(), // Cast to UUID
         });
 
         if (chunkError) {
@@ -62,11 +79,33 @@ export async function chatWithContext(req: any): Promise<ServiceResponse<null | 
             return ServiceResponse.failure("Failed to retrieve knowledge base context.", null, StatusCodes.INTERNAL_SERVER_ERROR);
         }
 
+        console.log("Chunks retrieved:", chunks);
+
+        // Check if chunks are empty and provide a fallback response
+        if (!chunks || chunks.length === 0) {
+            console.warn("No knowledge base data available. Providing fallback response.");
+            const fallbackResponse = "I'm sorry, I currently don't have enough information to answer that. Please try asking something else or contact support.";
+
+            // Save fallback bot reply
+            const { error: insertFallbackMsgError } = await supabase.from("chat_history").insert({
+                user_id: userId,
+                chatbot_id: numericChatbotId,
+                message: fallbackResponse,
+                sender: "bot",
+            });
+            if (insertFallbackMsgError) {
+                console.error("Failed to insert fallback bot reply", insertFallbackMsgError);
+                return ServiceResponse.failure("Failed to save fallback bot reply.", null, StatusCodes.INTERNAL_SERVER_ERROR);
+            }
+
+            return ServiceResponse.success("Fallback bot reply generated.", fallbackResponse);
+        }
+
         // Fetch chatbot persona/instructions
         const { data: chatbotInfo, error: chatbotInfoError } = await supabase
             .from("chatbots")
             .select("business_name,persona,instructions")
-            .eq("id", chatbotId)
+            .eq("id", numericChatbotId)
             .single();
 
         if (chatbotInfoError) {

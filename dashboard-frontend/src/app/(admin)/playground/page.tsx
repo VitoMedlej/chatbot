@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import Button from "@/components/ui/button/Button";
-import Label from "@/components/form/Label";
+
 
 export default function PlaygroundSelectorPage() {
   const [chatbots, setChatbots] = useState<any[]>([]);
