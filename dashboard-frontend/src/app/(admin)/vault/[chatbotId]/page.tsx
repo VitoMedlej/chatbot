@@ -24,14 +24,15 @@ export default function KnowledgeVaultPage() {
   const params = useParams();
   const chatbotId = params?.chatbotId as string;
   const [chatbot, setChatbot] = useState<any>(null);
+  console.log('chatbot: ', chatbot);
   const [sources, setSources] = useState<Source[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Manual text state
-  const [manualText, setManualText] = useState("");
   const [manualTitle, setManualTitle] = useState("");
   const [manualDesc, setManualDesc] = useState("");
+  const [manualText, setManualText] = useState("");
   const [manualLoading, setManualLoading] = useState(false);
 
   // URL state
@@ -47,23 +48,23 @@ export default function KnowledgeVaultPage() {
     async function fetchAll() {
       setLoading(true);
       setError(null);
-      const { data: bot, error: botErr } = await supabase
-        .from("chatbots")
-        .select("id,business_name,persona,instructions")
-        .eq("id", chatbotId)
-        .single();
-      if (botErr) setError(botErr.message);
-      setChatbot(bot);
 
-      const { data: srcs, error: srcErr } = await supabase
-        .from("chatbot_knowledge")
-        .select("*")
-        .eq("chatbot_id", chatbotId)
-        .order("created_at", { ascending: false });
-      if (srcErr) setError(srcErr.message);
-      setSources(srcs || []);
-      setLoading(false);
+      try {
+        const chatbotResponse = await fetch(`http://localhost:8080/api/chatbot/${chatbotId}`);
+        const chatbotData = await chatbotResponse.json();
+
+        const sourcesResponse = await fetch(`http://localhost:8080/api/chatbot/${chatbotId}/sources`);
+        const sourcesData = await sourcesResponse.json();
+
+        setChatbot(chatbotData.responseObject);
+        setSources(sourcesData.responseObject);
+      } catch (err: any) {
+        setError("Failed to load data. Please try again later.");
+      } finally {
+        setLoading(false);
+      }
     }
+
     if (chatbotId) fetchAll();
   }, [chatbotId]);
 
@@ -186,9 +187,8 @@ export default function KnowledgeVaultPage() {
       <h1 className="text-2xl font-bold mb-2">Knowledge Vault</h1>
       {chatbot && (
         <div className="mb-6 p-4 rounded bg-gray-50 dark:bg-gray-900 border">
-          <div className="font-semibold text-lg">{chatbot.business_name}</div>
-          <div className="text-sm text-gray-600 dark:text-gray-300 mb-1">{chatbot.persona}</div>
-          <div className="text-xs text-gray-500 dark:text-gray-400">{chatbot.instructions}</div>
+          <h2 className="text-lg font-bold">{chatbot.business_name}</h2>
+          <p className="text-sm text-gray-500">Chatbot ID: {chatbot.id}</p>
         </div>
       )}
       {loading && <div>Loading...</div>}
@@ -258,10 +258,10 @@ export default function KnowledgeVaultPage() {
       <div>
         <Label>Current Knowledge Sources</Label>
         <ul className="list-disc ml-6 text-sm text-gray-700 dark:text-gray-300">
-          {sources.length === 0 && (
+          {(!Array.isArray(sources) || sources.length === 0) && (
             <li className="text-gray-400">No knowledge sources yet.</li>
           )}
-          {sources.map((src) => (
+          {Array.isArray(sources) && sources.map((src) => (
             <li key={src.id} className="flex flex-col gap-1 mb-2 border-b pb-2">
               <div className="flex items-center justify-between">
                 <span className="font-semibold">
@@ -278,19 +278,6 @@ export default function KnowledgeVaultPage() {
               </div>
               {src.description && (
                 <div className="text-xs text-gray-500">{src.description}</div>
-              )}
-              {src.source_type === "website" && src.source_name && (
-                <div className="text-xs text-blue-700 dark:text-blue-300">
-                  <a href={src.source_name} target="_blank" rel="noopener noreferrer">
-                    {src.source_name}
-                  </a>
-                </div>
-              )}
-              {src.content && (
-                <div className="text-xs text-gray-600 dark:text-gray-400 line-clamp-3">
-                  {src.content.slice(0, 200)}
-                  {src.content.length > 200 ? "..." : ""}
-                </div>
               )}
             </li>
           ))}

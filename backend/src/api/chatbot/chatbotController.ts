@@ -15,6 +15,9 @@ import { listUserChatbots } from "./services/listChatbotsService";
 import { ingestManualLinks } from "./services/manualLinksService";
 import { uploadFile } from "./services/fileUploadService";
 import { generateQuestions } from "./services/generateQuestionsService"; // Import the new service
+import { listKnowledgeSources } from "./services/chatbotListService";
+import { supabase } from "@/server";
+import { getChatbotById } from "./services/chatbotGetService";
 
 
 class ChatbotController {
@@ -109,6 +112,19 @@ class ChatbotController {
         const { chatbotId } = req.body;
         const serviceResponse = await generateQuestions(chatbotId);
         return handleServiceResponse(serviceResponse, res);
+    };
+
+    listKnowledgeSourcesHandler: RequestHandler = async (req, res) => {
+        const chatbotId = req.params.chatbotId || req.body.chatbotId || req.query.chatbotId;
+
+        const serviceResponse = await listKnowledgeSources(chatbotId);
+        return handleServiceResponse(serviceResponse, res);
+    };
+
+    getChatbotByIdHandler: RequestHandler = async (req, res) => {
+        const chatbotId = req.params.chatbotId;
+        const serviceResponse = await getChatbotById(chatbotId);
+        handleServiceResponse(serviceResponse, res);
     };
 }
 

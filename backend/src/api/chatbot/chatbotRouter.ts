@@ -1,8 +1,11 @@
 import express from "express";
 import multer from "multer";
 import { chatbotController } from "./chatbotController";
+import { personaRouter } from "./personaRouter";
+import { fileRouter } from "./fileRouter";
+import { knowledgeRouter } from "./knowledgeRouter";
+import { websiteRouter } from "./websiteRouter";
 
-const upload = multer({ dest: "uploads/" });
 
 export const chatbotRouter = express.Router();
 
@@ -12,14 +15,13 @@ chatbotRouter.post("/rag-qa", chatbotController.retrieveAndAnswer);
 chatbotRouter.delete("/chunks", chatbotController.deleteChunksHandler);
 chatbotRouter.post("/list-chunks", chatbotController.listChunksHandler);
 chatbotRouter.post("/chat-context", chatbotController.chatWithContextHandler);
-chatbotRouter.post("/website-links", chatbotController.websiteLinksHandler);
-chatbotRouter.post("/sitemap-links", chatbotController.sitemapLinksHandler);
-chatbotRouter.post("/extract-website", chatbotController.extractWebsiteInfoHandler);
-chatbotRouter.post("/crawl-and-ingest", chatbotController.crawlAndIngestWebsiteHandler);
-chatbotRouter.post("/auto-generate-persona", chatbotController.autoGeneratePersonaHandler);
-chatbotRouter.post("/create", chatbotController.createChatbotHandler);
-chatbotRouter.get("/list", chatbotController.listUserChatbotsHandler);
-chatbotRouter.post("/upsert-default-persona", chatbotController.upsertDefaultPersonaHandler);
-chatbotRouter.post("/manual-links", chatbotController.ingestManualLinksHandler);
-chatbotRouter.post("/upload-file", upload.single("file"), chatbotController.uploadFileHandler);
 chatbotRouter.post("/generate-questions", chatbotController.generateQuestionsHandler);
+chatbotRouter.get("/:chatbotId/sources", chatbotController.listKnowledgeSourcesHandler);
+chatbotRouter.get("/:chatbotId/sources/all", chatbotController.listKnowledgeSourcesHandler);
+chatbotRouter.get("/list", chatbotController.listUserChatbotsHandler);
+chatbotRouter.get("/:chatbotId", chatbotController.getChatbotByIdHandler);
+
+chatbotRouter.use("/persona", personaRouter);
+chatbotRouter.use("/file", fileRouter);
+chatbotRouter.use("/knowledge", knowledgeRouter);
+chatbotRouter.use("/website", websiteRouter);

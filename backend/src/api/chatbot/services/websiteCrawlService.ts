@@ -127,11 +127,24 @@ export async function getSitemapLinksService(req: any): Promise<ServiceResponse<
 // Function to insert document chunk into the database
 export async function insertDocumentChunk(chatbotId: string, chunkText: string, embedding: number[], url: string, pageTitle: string, linksArray: string[]) {
     try {
-        const sanitizedChunkText = chunkText.replace(/[^a-zA-Z0-9\s]/g, "").trim();
+        // Validate and sanitize chunkText
+        const isValidContent = (text: string) => {
+            const wordCount = text.split(/\s+/).length;
+            return wordCount > 3 && /[a-zA-Z]/.test(text); // Ensure it has at least 3 words and contains letters
+        };
+
+        const sanitizedChunkText = chunkText
+            .replace(/[^a-zA-Z0-9\s]/g, "") // Remove special characters
+            .trim();
+
+        if (!isValidContent(sanitizedChunkText)) {
+            console.warn("Invalid or insufficient content, skipping chunk.");
+            return; // Skip saving invalid or insufficient content
+        }
 
         await supabase.from('document_chunks').insert({
             chatbot_id: chatbotId,
-            content: sanitizedChunkText, // Save sanitized and meaningful text
+            content: sanitizedChunkText, // Save sanitized and validated text
             embedding: embedding, // Always array of floats
             source_url: url,
             title: pageTitle,

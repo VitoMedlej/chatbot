@@ -3,9 +3,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { supabase } from "@/lib/supabase";
 import Button from "@/components/ui/button/Button";
-import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
 import { ChevronLeftIcon } from "@/icons";
 import PageSelectionStep from "./components/PageSelectionStep";
@@ -32,22 +30,18 @@ export default function ChatbotSetupPage() {
         router.replace("/(admin)");
         return;
       }
-      // Fetch chatbot info
-      const { data } = await supabase
-        .from("chatbots")
-        .select("id,setup_complete")
-        .eq("id", chatbotId)
-        .single();
-      if (!data) {
+      try {
+        const res = await fetch(`http://localhost:8080/api/chatbot/${chatbotId}`);
+        const data = await res.json();
+        if (!data || data.setup_complete) {
+          router.replace(`/vault/${chatbotId}`);
+          return;
+        }
+        setLoading(false);
+      } catch (error) {
+        console.error("Failed to fetch chatbot info:", error);
         router.replace("/(admin)");
-        return;
       }
-      if (data.setup_complete) {
-        // Already setup, redirect to dashboard or chatbot details
-        router.replace(`/vault/${chatbotId}`);
-        return;
-      }
-      setLoading(false);
     }
     checkSetup();
   }, [chatbotId, router]);
@@ -104,38 +98,32 @@ export default function ChatbotSetupPage() {
   const handleCrawlSelected = async () => {
     setError(null);
     setLoading(true);
-    const user = (await supabase.auth.getUser()).data.user;
-    if (!user) {
-      setError("You must be logged in.");
+    try {
+      const res = await fetch("http://localhost:8080/api/chatbot/crawl-and-ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: website,
+          chatbotId,
+          selectedUrls: selectedPages,
+        }),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        throw new Error(result.message || "Failed to crawl website.");
+      }
+      setScrapedPages(result.responseObject?.crawledUrls || []);
+      await fetch("http://localhost:8080/api/chatbot/auto-generate-persona", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatbotId }),
+      });
+      setStep(2);
+    } catch (error: any) {
+      setError(error.message);
+    } finally {
       setLoading(false);
-      return;
     }
-    const res = await fetch("http://localhost:8080/api/chatbot/crawl-and-ingest", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        url: website,
-        chatbotId,
-        userId: user.id,
-        selectedUrls: selectedPages,
-      }),
-    });
-    const result = await res.json();
-    setLoading(false);
-    if (!res.ok) {
-      setError(result.message || "Failed to crawl website.");
-      return;
-    }
-    if (result.responseObject?.crawledUrls) {
-      setScrapedPages(result.responseObject.crawledUrls);
-    }
-    // Auto-generate persona after ingestion
-    await fetch("http://localhost:8080/api/chatbot/auto-generate-persona", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chatbotId }),
-    });
-    setStep(2);
   };
 
   // Ingest manual links
@@ -143,33 +131,30 @@ export default function ChatbotSetupPage() {
     if (!manualLinks.trim()) return;
     setLoading(true);
     setError(null);
-    const user = (await supabase.auth.getUser()).data.user;
-    if (!user) {
-      setError("You must be logged in.");
+    try {
+      const links = manualLinks
+        .split("\n")
+        .map((l) => l.trim())
+        .filter((l) => l.startsWith("http"));
+      const res = await fetch("http://localhost:8080/api/chatbot/manual-links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chatbotId,
+          links,
+        }),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        throw new Error(result.message || "Failed to ingest links.");
+      }
+      setScrapedPages(result.responseObject?.crawledUrls || []);
+      setStep(2);
+    } catch (error: any) {
+      setError(error.message);
+    } finally {
       setLoading(false);
-      return;
     }
-    const links = manualLinks
-      .split("\n")
-      .map(l => l.trim())
-      .filter(l => l.startsWith("http"));
-    const res = await fetch("http://localhost:8080/api/chatbot/manual-links", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chatbotId,
-        userId: user.id,
-        links,
-      }),
-    });
-    const result = await res.json();
-    setLoading(false);
-    if (!res.ok) {
-      setError(result.message || "Failed to ingest links.");
-      return;
-    }
-    setScrapedPages(result.responseObject?.crawledUrls || []);
-    setStep(2);
   };
 
   // Step 3: Done

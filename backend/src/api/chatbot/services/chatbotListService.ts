@@ -35,3 +35,30 @@ export async function listChunks(chatbotId: number): Promise<ServiceResponse<any
         return ServiceResponse.failure(err.message, [], StatusCodes.INTERNAL_SERVER_ERROR);
     }
 }
+
+/**
+ * Lists all knowledge sources for a chatbot, grouped by type.
+ */
+export async function listKnowledgeSources(chatbotId: string): Promise<ServiceResponse<any>> {
+    try {
+        if (!chatbotId) {
+            return ServiceResponse.failure("Missing chatbotId.", null, StatusCodes.BAD_REQUEST);
+        }
+
+        // Query the chatbot_knowledge table
+        const { data, error } = await supabase
+            .from('chatbot_knowledge')
+            .select('*')
+            .eq('chatbot_id', chatbotId);
+
+        if (error) {
+            console.error("Supabase error while fetching knowledge sources:", error);
+            return ServiceResponse.failure("Failed to fetch knowledge sources.", null, 500);
+        }
+
+        return ServiceResponse.success("Knowledge sources retrieved successfully.", data || []);
+    } catch (err: any) {
+        console.error("Error in listKnowledgeSources:", err);
+        return ServiceResponse.failure("Internal server error.", null, 500);
+    }
+}
