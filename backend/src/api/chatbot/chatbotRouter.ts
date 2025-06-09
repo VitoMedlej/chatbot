@@ -20,6 +20,7 @@ chatbotRouter.get("/:chatbotId/sources", chatbotController.listKnowledgeSourcesH
 chatbotRouter.get("/:chatbotId/sources/all", chatbotController.listKnowledgeSourcesHandler);
 chatbotRouter.get("/list", chatbotController.listUserChatbotsHandler);
 chatbotRouter.get("/:chatbotId", chatbotController.getChatbotByIdHandler);
+chatbotRouter.post("/manual-ingest", chatbotController.manualIngestHandler);
 
 chatbotRouter.use("/persona", personaRouter);
 chatbotRouter.use("/file", fileRouter);

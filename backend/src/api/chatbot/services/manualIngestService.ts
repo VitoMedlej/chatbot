@@ -17,7 +17,7 @@ export async function ingestManualText(req: any): Promise<ServiceResponse<any>> 
         const embeddings = await Promise.all(
             chunks.map(async (chunk) => {
                 const embeddingResponse = await openai.embeddings.create({
-                    model: "text-embedding-ada-002",
+                    model: "text-embedding-3-small", // Use same model as retrieval
                     input: chunk,
                 });
                 return embeddingResponse.data[0].embedding;
@@ -28,6 +28,7 @@ export async function ingestManualText(req: any): Promise<ServiceResponse<any>> 
         const { error } = await supabase.from("document_chunks").insert(
             chunks.map((chunk, index) => ({
                 chatbot_id: chatbotId,
+                user_id: req.body.userId, // Add user_id from request
                 content: chunk,
                 embedding: embeddings[index],
                 title,
@@ -36,9 +37,11 @@ export async function ingestManualText(req: any): Promise<ServiceResponse<any>> 
         );
 
         if (error) {
+            console.log('error: ', error);
             return ServiceResponse.failure("Failed to save chunks.", null, StatusCodes.INTERNAL_SERVER_ERROR);
         }
 
+        // Do NOT update setup_complete here (manual ingest)
         return ServiceResponse.success("Manual text ingested successfully.", null);
     } catch (err: any) {
         return ServiceResponse.failure("Failed to ingest manual text.", null, StatusCodes.INTERNAL_SERVER_ERROR);

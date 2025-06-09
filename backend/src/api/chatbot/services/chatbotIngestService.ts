@@ -25,11 +25,8 @@ export async function ingestText(req: Request): Promise<ServiceResponse<null>> {
             return ServiceResponse.failure('Missing or invalid userId for document_chunks insert', null, StatusCodes.BAD_REQUEST);
         }
 
-        console.log(`[ingestText] chatbotId: ${chatbotId}`);
-        console.log(`[ingestText] userId: ${userId}`);
 
         const chunks = chunkText(text);
-        console.log(`[ingestText] Number of chunks: ${chunks.length}`);
 
         const embeddingPromises: Promise<any>[] = [];
         let openaiQuotaExceeded = false;

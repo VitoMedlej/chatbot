@@ -22,7 +22,6 @@ export function handleSortQuery(query: { sort?: string | null; size?: string; co
         break;
     }
 
-    console.log('final sortQuery: ', sortQuery);
     return sortQuery;
   } catch (error) {
     console.error('Error handling sort query:', (error as Error).message);

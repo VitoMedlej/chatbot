@@ -110,26 +110,40 @@ export async function crawlAndIngestWebsiteJob(job: {
                     continue;
                 }
 
-                // --- Send content to RAG pipeline (ingestText) ---
-                const ingestReq = {
-                    body: {
-                        text: String(content),
-                        chatbotId: chatbotId,
-                        userId: userId,
+                // --- Chunk content and insert into document_chunks for RAG ---
+                const chunks = chunkText(content);
+                let chunkEmbeddings: number[][] = [];
+                try {
+                    chunkEmbeddings = await Promise.all(
+                        chunks.map(async (chunk) => {
+                            const embeddingResponse = await openai.embeddings.create({
+                                model: "text-embedding-ada-002",
+                                input: chunk,
+                            });
+                            return embeddingResponse.data[0].embedding;
+                        })
+                    );
+                } catch (embedErr: any) {
+                    errors.push({ type: "embedding", url: pageUrl, error: embedErr.message || embedErr });
+                    continue;
+                }
+
+                // Insert chunks into document_chunks table
+                const { error: docChunkError } = await supabase.from("document_chunks").insert(
+                    chunks.map((chunk, idx) => ({
+                        chatbot_id: chatbotId,
+                        content: chunk,
+                        embedding: chunkEmbeddings[idx],
                         source_url: pageUrl,
                         title,
-                        links: [], // Optionally extract links/buttons as above
-                        buttons: []
-                    }
-                } as any;
-
-                const ingestResponse = await ingestText(ingestReq);
-                if (!ingestResponse.success) {
-                    errors.push({ type: "embedding", url: pageUrl, error: ingestResponse.message });
+                    }))
+                );
+                if (docChunkError) {
+                    errors.push({ type: "doc_chunk", url: pageUrl, error: docChunkError.message || docChunkError });
                     continue;
                 }
                 pagesCrawledCount++;
-                chunksIngestedCount += 1;
+                chunksIngestedCount += chunks.length;
                 processedContentUrls.add(pageUrl);
             } catch (pageErr: any) {
                 errors.push({ type: "page", url: pageUrl, error: pageErr.message || pageErr });
@@ -144,6 +158,12 @@ export async function crawlAndIngestWebsiteJob(job: {
                 StatusCodes.NOT_FOUND
             );
         }
+
+        // Mark chatbot as setup_complete after successful website crawl
+        await supabase
+            .from("chatbots")
+            .update({ setup_complete: true })
+            .eq("id", chatbotId);
 
         return ServiceResponse.success(
             `Website crawl completed. ${pagesCrawledCount} pages processed, ${chunksIngestedCount} chunks ingested.`,

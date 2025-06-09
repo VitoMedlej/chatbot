@@ -7,7 +7,6 @@ import { ServiceResponse } from "@/common/models/serviceResponse";
  * @returns A promise resolving to a ServiceResponse object.
  */
 export const getChatbotById = async (chatbotId: string): Promise<ServiceResponse> => {
-    console.log('chatbotId: ', chatbotId);
     if (!chatbotId) {
         return ServiceResponse.failure("Chatbot ID is required.", null, 400);
     }

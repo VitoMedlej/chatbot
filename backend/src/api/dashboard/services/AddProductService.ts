@@ -25,7 +25,6 @@ export async function addProduct(newProduct: Product): Promise<ServiceResponse<n
     } as any;
 
     const result = await productsCollection.insertOne(documentToInsert);
-    console.log('result: ', result);
     if (!result.acknowledged) {
       logger.error("Failed to add product.");
       return ServiceResponse.failure("Failed to add product.", null, StatusCodes.INTERNAL_SERVER_ERROR);

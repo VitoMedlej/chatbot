@@ -12,7 +12,6 @@ const schema = z.object({
 
 export async function GenerateDescription(req: Request): Promise<ServiceResponse<{ description: string } | null>> {
   const parsed = schema.safeParse(req.body);
-  console.log(req.body);
   if (!parsed.success) {
     return ServiceResponse.failure("Invalid input", null, StatusCodes.BAD_REQUEST);
   }

@@ -30,7 +30,7 @@ async function retrieveAndAnswer(req: Request): Promise<ServiceResponse<null | {
         // 2. Query Supabase for similar knowledge chunks
         const { data: chunks, error } = await supabase.rpc("match_document_chunks", {
             query_embedding: questionEmbedding,
-            match_threshold: 0.78,
+            match_threshold: 0.6, // Lowered from 0.78 to 0.6 for better recall
             match_count: TOP_K,
             chatbot_id: Number(chatbotId),
         });

@@ -18,6 +18,7 @@ import { generateQuestions } from "./services/generateQuestionsService"; // Impo
 import { listKnowledgeSources } from "./services/chatbotListService";
 import { supabase } from "@/server";
 import { getChatbotById } from "./services/chatbotGetService";
+import { ingestManualText } from "./services/manualIngestService";
 
 
 class ChatbotController {
@@ -125,6 +126,11 @@ class ChatbotController {
         const chatbotId = req.params.chatbotId;
         const serviceResponse = await getChatbotById(chatbotId);
         handleServiceResponse(serviceResponse, res);
+    };
+
+    manualIngestHandler: RequestHandler = async (req, res) => {
+        const serviceResponse = await ingestManualText(req);
+        return handleServiceResponse(serviceResponse, res);
     };
 }
 

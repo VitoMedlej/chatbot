@@ -90,6 +90,12 @@ export async function uploadFile(req: any): Promise<ServiceResponse<any>> {
 
         await Promise.all(embeddingPromises);
 
+        // Mark chatbot as setup_complete after successful file ingest
+        await supabase
+            .from("chatbots")
+            .update({ setup_complete: true })
+            .eq("id", chatbotId);
+
         return ServiceResponse.success("File uploaded and content embedded.", null);
     } catch (err: any) {
         return ServiceResponse.failure(`Failed to process file upload: ${err.message}`, null, StatusCodes.INTERNAL_SERVER_ERROR);

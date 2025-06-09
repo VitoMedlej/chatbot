@@ -3,10 +3,8 @@ import { StatusCodes } from "http-status-codes";
 import { supabase, openai } from "@/server";
 
 export async function chatWithContext(req: any): Promise<ServiceResponse<null | string>> {
-    console.log("chatWithContext called", JSON.stringify(req.body));
     try {
         let { userId, chatbotId, message } = req.body;
-        console.log('chatbotId: ', chatbotId);
         chatbotId = Number(chatbotId); // Ensure chatbotId is a number
 
 
@@ -64,8 +62,6 @@ export async function chatWithContext(req: any): Promise<ServiceResponse<null | 
             return ServiceResponse.failure("Failed to generate embedding.", null, StatusCodes.INTERNAL_SERVER_ERROR);
         }
 
-        console.log("Embedding generated:", embedding);
-        console.log("Casting chatbotId to UUID for document_chunks table:", numericChatbotId);
 
         const { data: chunks, error: chunkError } = await supabase.rpc("match_document_chunks", {
             query_embedding: embedding,
@@ -79,7 +75,6 @@ export async function chatWithContext(req: any): Promise<ServiceResponse<null | 
             return ServiceResponse.failure("Failed to retrieve knowledge base context.", null, StatusCodes.INTERNAL_SERVER_ERROR);
         }
 
-        console.log("Chunks retrieved:", chunks);
 
         // Check if chunks are empty and provide a fallback response
         if (!chunks || chunks.length === 0) {
@@ -171,7 +166,6 @@ export async function chatWithContext(req: any): Promise<ServiceResponse<null | 
             return ServiceResponse.failure("Failed to save bot reply.", null, StatusCodes.INTERNAL_SERVER_ERROR);
         }
 
-        console.log("Bot reply generated successfully");
         return ServiceResponse.success("Bot reply generated.", botReply);
     } catch (err: any) {
         console.error("Unhandled error in chatWithContext", err);

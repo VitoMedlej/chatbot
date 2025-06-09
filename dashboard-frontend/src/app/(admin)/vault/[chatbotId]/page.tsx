@@ -24,7 +24,6 @@ export default function KnowledgeVaultPage() {
   const params = useParams();
   const chatbotId = params?.chatbotId as string;
   const [chatbot, setChatbot] = useState<any>(null);
-  console.log('chatbot: ', chatbot);
   const [sources, setSources] = useState<Source[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,27 +43,25 @@ export default function KnowledgeVaultPage() {
   const [fileLoading, setFileLoading] = useState(false);
 
   // Fetch chatbot info and sources
-  useEffect(() => {
-    async function fetchAll() {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const chatbotResponse = await fetch(`http://localhost:8080/api/chatbot/${chatbotId}`);
-        const chatbotData = await chatbotResponse.json();
-
-        const sourcesResponse = await fetch(`http://localhost:8080/api/chatbot/${chatbotId}/sources`);
-        const sourcesData = await sourcesResponse.json();
-
-        setChatbot(chatbotData.responseObject);
-        setSources(sourcesData.responseObject);
-      } catch (err: any) {
-        setError("Failed to load data. Please try again later.");
-      } finally {
-        setLoading(false);
-      }
+  const fetchAll = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Fetch chatbot info from backend
+      const chatbotRes = await fetch(`http://localhost:8080/api/chatbot/${chatbotId}`);
+      const chatbotData = await chatbotRes.json();
+      setChatbot(chatbotData?.responseObject || null);
+      // Fetch sources from backend
+      const sourcesRes = await fetch(`http://localhost:8080/api/chatbot/${chatbotId}/sources`);
+      const sourcesData = await sourcesRes.json();
+      setSources(sourcesData?.responseObject || []);
+    } catch (err: any) {
+      setError("Failed to load chatbot or sources");
     }
+    setLoading(false);
+  };
 
+  useEffect(() => {
     if (chatbotId) fetchAll();
   }, [chatbotId]);
 
@@ -73,11 +70,13 @@ export default function KnowledgeVaultPage() {
     e.preventDefault();
     setManualLoading(true);
     setError(null);
+    // Call backend API, not Supabase directly
     const res = await fetch("http://localhost:8080/api/chatbot/manual-ingest", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         chatbotId,
+        userId: chatbot?.user_id, // Pass userId if available
         title: manualTitle,
         description: manualDesc,
         content: manualText,
@@ -86,19 +85,14 @@ export default function KnowledgeVaultPage() {
     const result = await res.json();
     setManualLoading(false);
     if (!res.ok) {
-      setError(result.message || "Failed to ingest manual text.");
+      setError(result?.message || "Failed to ingest text");
       return;
     }
     setManualText("");
     setManualTitle("");
     setManualDesc("");
-    // Refresh sources
-    const { data: srcs } = await supabase
-      .from("chatbot_knowledge")
-      .select("*")
-      .eq("chatbot_id", chatbotId)
-      .order("created_at", { ascending: false });
-    setSources(srcs || []);
+    // Refresh sources from backend API (not direct DB)
+    fetchAll();
   };
 
   // Add URL (extract and ingest)

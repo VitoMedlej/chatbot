@@ -68,7 +68,6 @@ export async function extractWebsiteInfo(req: any): Promise<ServiceResponse<any>
                 metadata: null
             }
         ]);
-        console.log("[extractWebsiteInfo] Inserted into chatbot_knowledge", { chatbotId, userId, url });
 
         if (knowledgeError) {
             console.error("Error inserting into chatbot_knowledge:", knowledgeError);
@@ -91,9 +90,7 @@ export async function extractWebsiteInfo(req: any): Promise<ServiceResponse<any>
                 body: ingestReqBody
             } as Request;
 
-            console.log("[extractWebsiteInfo] Calling ingestText with", ingestReqBody);
             const ingestResponse = await ingestText(mockIngestReq);
-            console.log("[extractWebsiteInfo] ingestText response", ingestResponse);
 
             if (!ingestResponse.success) {
                 console.warn("Website info saved to knowledge base, but failed to ingest text for embeddings:", ingestResponse.message);

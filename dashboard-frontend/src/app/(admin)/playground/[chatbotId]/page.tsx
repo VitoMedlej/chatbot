@@ -12,7 +12,6 @@ export default function ChatbotPlaygroundPage() {
   const router = useRouter();
   const params = useParams();
   const chatbotId = params?.chatbotId as string;
-  console.log('chatbotId: ', chatbotId);
 
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
   const [input, setInput] = useState("");
