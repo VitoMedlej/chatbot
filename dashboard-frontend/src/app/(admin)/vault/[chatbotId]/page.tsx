@@ -106,12 +106,21 @@ export default function KnowledgeVaultPage() {
     e.preventDefault();
     setUrlLoading(true);
     setError(null);
-    const res = await fetch("http://localhost:8080/api/chatbot/extract-website", {
+
+    // Ensure chatbot and chatbot.user_id are available
+    if (!chatbot || !chatbot.user_id) {
+      setError("Chatbot user ID is not available. Please reload the page.");
+      setUrlLoading(false);
+      return;
+    }
+
+    const res = await fetch("http://localhost:8080/api/chatbot/website/extract-website", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         url: urlInput,
         chatbotId,
+        userId: chatbot.user_id, // Add userId to the request body
       }),
     });
     const result = await res.json();
@@ -142,7 +151,7 @@ export default function KnowledgeVaultPage() {
       formData.append("file", file);
       formData.append("chatbotId", chatbotId);
 
-      const res = await fetch("http://localhost:8080/api/chatbot/upload-file", {
+      const res = await fetch("http://localhost:8080/api/chatbot/website/upload-file", {
         method: "POST",
         body: formData,
       });

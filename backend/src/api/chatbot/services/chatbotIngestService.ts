@@ -52,16 +52,22 @@ export async function ingestText(req: Request): Promise<ServiceResponse<null>> {
                             .insert({
                                 content: String(chunk), // Always string
                                 embedding: embedding, // Always array of floats
-                                chatbot_id: chatbotId,
+                                chatbot_id: Number(chatbotId), // force integer for correct type
                                 user_id: validUserId,
                                 source_url: req.body.source_url || null,
                                 title: req.body.title || null,
                                 links: req.body.links ? JSON.stringify(req.body.links) : null,
                                 buttons: req.body.buttons ? JSON.stringify(req.body.buttons) : null,
                             });
-
                         if (insertError) {
-                            console.error('Supabase insert error: ' + insertError.message, insertError);
+                            console.error('[ingestText] Supabase insert error:', insertError);
+                        } else {
+                            console.log('[ingestText] Inserted chunk into document_chunks', {
+                                chatbot_id: Number(chatbotId),
+                                user_id: validUserId,
+                                title: req.body.title,
+                                source_url: req.body.source_url
+                            });
                         }
                     } catch (embedOrInsertError: any) {
                         if (

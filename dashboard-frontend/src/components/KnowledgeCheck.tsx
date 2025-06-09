@@ -15,10 +15,11 @@ export default function KnowledgeCheck({ chatbotId }: KnowledgeCheckProps) {
   useEffect(() => {
     const checkKnowledge = async () => {
       try {
-        const res = await fetch(`/api/chatbot/${chatbotId}/sources`);
+        const res = await fetch(`http://localhost:8080/api/chatbot/${chatbotId}/sources`);
         const data = await res.json();
 
-        if (data && data.length > 0) {
+        console.log('data: ', data);
+        if (data && data?.success && data?.responseObject.length > 0) {
           setHasKnowledge(true);
         } else {
           setHasKnowledge(false);

@@ -3,12 +3,19 @@ import { StatusCodes } from "http-status-codes";
 import { JSDOM } from "jsdom";
 import { Readability } from "@mozilla/readability";
 import { supabase } from "@/server";
+import { ingestText } from "./chatbotIngestService";
+import { Request } from "express";
 
 export async function extractWebsiteInfo(req: any): Promise<ServiceResponse<any>> {
     try {
-        const { url, chatbotId } = req.body;
+        const { url, chatbotId, userId } = req.body; // userId is now expected
+
         if (!url || typeof url !== "string" || !chatbotId) {
             return ServiceResponse.failure("Missing or invalid url or chatbotId.", null, StatusCodes.BAD_REQUEST);
+        }
+        // Add validation for userId
+        if (!userId) {
+            return ServiceResponse.failure("Missing userId.", null, StatusCodes.BAD_REQUEST);
         }
 
         const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
@@ -29,7 +36,7 @@ export async function extractWebsiteInfo(req: any): Promise<ServiceResponse<any>
                 href: a.href
             }))
             .filter(a => a.href && a.text);
-
+        
         const buttons = Array.from(doc.querySelectorAll("button,input[type='button'],input[type='submit']"))
             .map(b => ({
                 text: b.textContent?.trim() || b.getAttribute("value") || "",
@@ -37,34 +44,78 @@ export async function extractWebsiteInfo(req: any): Promise<ServiceResponse<any>
             }))
             .filter(b => b.text);
 
-        const extraction = ServiceResponse.success("Website info extracted.", {
+        const extractionResult = {
             url,
-            title: article?.title || doc.title,
+            title: article?.title || doc.title || "Untitled", // Fallback title
             description: article?.excerpt || "",
             content: article?.textContent || "",
             links: anchors,
             buttons: buttons
-        });
+        };
 
-        if (extraction.success && extraction.responseObject) {
-            const { url, title, description, content, links, buttons } = extraction.responseObject;
-            await supabase.from("chatbot_knowledge").insert([
-                {
-                    chatbot_id: chatbotId,
-                    source_type: "website",
-                    source_name: url,
-                    title,
-                    description,
-                    content,
-                    links,
-                    buttons,
-                    metadata: null
-                }
-            ]);
+        // Insert into chatbot_knowledge
+        const { error: knowledgeError } = await supabase.from("chatbot_knowledge").insert([
+            {
+                chatbot_id: chatbotId,
+                user_id: userId,
+                source_type: "website",
+                source_name: extractionResult.url,
+                title: extractionResult.title,
+                description: extractionResult.description,
+                content: extractionResult.content,
+                links: extractionResult.links,
+                buttons: extractionResult.buttons,
+                metadata: null
+            }
+        ]);
+        console.log("[extractWebsiteInfo] Inserted into chatbot_knowledge", { chatbotId, userId, url });
+
+        if (knowledgeError) {
+            console.error("Error inserting into chatbot_knowledge:", knowledgeError);
+            return ServiceResponse.failure(`Failed to save knowledge: ${knowledgeError.message}`, null, StatusCodes.INTERNAL_SERVER_ERROR);
         }
 
-        return extraction;
+        // If knowledge insertion is successful, proceed to ingest text for embeddings
+        if (extractionResult.content && extractionResult.content.trim() !== "") {
+            const ingestReqBody = {
+                text: extractionResult.content,
+                chatbotId: chatbotId,
+                userId: userId,
+                source_url: extractionResult.url,
+                title: extractionResult.title,
+                links: extractionResult.links,
+                buttons: extractionResult.buttons
+            };
+
+            const mockIngestReq = {
+                body: ingestReqBody
+            } as Request;
+
+            console.log("[extractWebsiteInfo] Calling ingestText with", ingestReqBody);
+            const ingestResponse = await ingestText(mockIngestReq);
+            console.log("[extractWebsiteInfo] ingestText response", ingestResponse);
+
+            if (!ingestResponse.success) {
+                console.warn("Website info saved to knowledge base, but failed to ingest text for embeddings:", ingestResponse.message);
+                return ServiceResponse.success(
+                    "Website info extracted and saved to knowledge base. Embedding process initiated (check logs for status).",
+                    extractionResult
+                );
+            } else {
+                 return ServiceResponse.success(
+                    "Website info extracted, saved to knowledge base, and submitted for embedding.",
+                    extractionResult
+                );
+            }
+        } else {
+            return ServiceResponse.success(
+                "Website info extracted and saved to knowledge base. No content found to embed.",
+                extractionResult
+            );
+        }
+
     } catch (err: any) {
-        return ServiceResponse.failure("Failed to extract website info.", null, StatusCodes.INTERNAL_SERVER_ERROR);
+        console.error("Error in extractWebsiteInfo:", err);
+        return ServiceResponse.failure(`Failed to extract website info: ${err.message}`, null, StatusCodes.INTERNAL_SERVER_ERROR);
     }
 }
