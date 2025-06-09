@@ -35,18 +35,25 @@ export async function chatWithContext(req: any): Promise<ServiceResponse<null | 
             return ServiceResponse.failure("Failed to save user message.", null, 500);
         }
 
-        // Fetch recent chat history (last 10)
+        // Fetch recent chat history for this user and chatbot
         const { data: history, error: fetchHistoryError } = await supabase
             .from("chat_history")
             .select("message,sender")
             .eq("user_id", userId)
-            .eq("chatbot_id", numericChatbotId)
+            .eq("chatbot_id", chatbotId)
             .order("created_at", { ascending: false })
             .limit(10);
-
         if (fetchHistoryError) {
-            console.error("Error fetching chat history:", fetchHistoryError);
             return ServiceResponse.failure("Failed to retrieve chat history.", null, 500);
+        }
+
+        // Build chat history string for context
+        let chatHistoryContext = "";
+        if (history && history.length > 0) {
+            chatHistoryContext = history
+                .reverse()
+                .map((msg: any) => `${msg.sender === "user" ? "User" : "Bot"}: ${msg.message}`)
+                .join("\n");
         }
 
         // VECTOR SEARCH: retrieve relevant chunks
@@ -127,12 +134,6 @@ export async function chatWithContext(req: any): Promise<ServiceResponse<null | 
             }
         }
 
-        // Build chat history string
-        let chatHistory = "";
-        (history || []).reverse().forEach((entry: any) => {
-            chatHistory += `${entry.sender === "user" ? "User" : "Bot"}: ${entry.message}\n`;
-        });
-
         // Build knowledge context string
         let knowledgeContext = "";
         if (chunks && chunks.length > 0) {
@@ -147,8 +148,8 @@ export async function chatWithContext(req: any): Promise<ServiceResponse<null | 
             });
         }
 
-        // Compose user prompt
-        const userPrompt = `${chatHistory}\n${knowledgeContext}\nBot:`;
+        // Compose user prompt with chat history and knowledge context
+        const userPrompt = `${chatHistoryContext}\n\n${knowledgeContext}\nBot:`;
 
         // Call OpenAI
         let botReply = "";

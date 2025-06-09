@@ -13,10 +13,10 @@ async function retrieveAndAnswer(req: Request): Promise<ServiceResponse<null | {
             return ServiceResponse.failure("Missing question or chatbotId.", null, StatusCodes.BAD_REQUEST);
         }
 
-        // Fetch chatbot persona/instructions
+        // Fetch chatbot persona/instructions and homepage_url
         const { data: chatbotInfo } = await supabase
             .from("chatbots")
-            .select("business_name,persona,instructions")
+            .select("business_name,persona,instructions,homepage_url")
             .eq("id", chatbotId)
             .single();
 
@@ -39,8 +39,33 @@ async function retrieveAndAnswer(req: Request): Promise<ServiceResponse<null | {
             return ServiceResponse.failure("Vector search failed.", null, StatusCodes.INTERNAL_SERVER_ERROR);
         }
 
+        // Filter out homepage-only and generic chunks
+        const HOMEPAGE_URLS = [
+            chatbotInfo?.homepage_url || '',
+            chatbotInfo?.homepage_url?.replace(/\/$/, '') || '', // without trailing slash
+        ].filter(Boolean);
+        function isHomepage(url: string) {
+            if (!url) return false;
+            return HOMEPAGE_URLS.some(hp => hp && (url === hp || url === hp + '/'));
+        }
+        function isGenericContent(content: string) {
+            if (!content) return false;
+            const lower = content.toLowerCase();
+            return (
+                lower.includes('welcome to our website') ||
+                lower.includes('for more info, visit our homepage') ||
+                lower.match(/visit( our)? homepage/i)
+            );
+        }
+        const filteredChunks = (chunks ?? []).filter((c: any) => {
+            // Filter out if the chunk is homepage-only or generic
+            if (isHomepage(c.source_url)) return false;
+            if (isGenericContent(c.content)) return false;
+            return true;
+        });
+
         // Build context with links/buttons/titles
-        const context = (chunks ?? [])
+        const context = filteredChunks
             .map((c: any) => {
                 let meta = "";
                 if (c.title) meta += `Title: ${c.title}\n`;
@@ -57,7 +82,8 @@ async function retrieveAndAnswer(req: Request): Promise<ServiceResponse<null | {
             (chatbotInfo?.instructions ||
                 `You are the official chatbot for ${chatbotInfo?.business_name || "this business"}.
 Be concise and helpful. Only be detailed if the user asks for details.
-Never say you are ChatGPT. Always answer as a representative of ${chatbotInfo?.business_name || "this business"}.`);
+Never say you are ChatGPT. Always answer as a representative of ${chatbotInfo?.business_name || "this business"}.
+Do NOT suggest the homepage or a generic link unless the user specifically asks for it or it is directly relevant to their question. If you do not have a relevant link, answer based on the provided context or ask for clarification.`);
 
         const completion = await openai.chat.completions.create({
             model: GPT_MODEL,
