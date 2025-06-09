@@ -96,22 +96,36 @@ export async function chatWithContext(req: any): Promise<ServiceResponse<null | 
             return ServiceResponse.success("Fallback bot reply generated.", fallbackResponse);
         }
 
-        // Fetch chatbot persona/instructions
-        const { data: chatbotInfo, error: chatbotInfoError } = await supabase
+        // Fetch chatbot persona/instructions and personality
+        const { data: chatbotInfo } = await supabase
             .from("chatbots")
-            .select("business_name,persona,instructions")
-            .eq("id", numericChatbotId)
+            .select("business_name,persona,instructions,personality")
+            .eq("id", chatbotId)
             .single();
 
-        if (chatbotInfoError) {
-            console.error("Failed to fetch chatbot info", chatbotInfoError);
-            return ServiceResponse.failure("Failed to fetch chatbot info.", null, StatusCodes.INTERNAL_SERVER_ERROR);
-        }
-
-        const systemPrompt =
-            chatbotInfo?.instructions ||
-            chatbotInfo?.persona ||
+        // Compose system prompt with personality
+        let systemPrompt = chatbotInfo?.instructions || chatbotInfo?.persona ||
             `You are the official chatbot for ${chatbotInfo?.business_name || "this business"}. Be concise unless asked for details. Never say you are ChatGPT. Always answer as a representative of ${chatbotInfo?.business_name || "this business"}.`;
+        if (chatbotInfo?.personality) {
+            switch (chatbotInfo.personality) {
+                case "professional":
+                    systemPrompt = `Respond formally and with expertise. ${systemPrompt}`;
+                    break;
+                case "enthusiastic":
+                    systemPrompt = `Respond with energy and positivity. ${systemPrompt}`;
+                    break;
+                case "concise":
+                    systemPrompt = `Keep answers brief and to the point. ${systemPrompt}`;
+                    break;
+                case "empathetic":
+                    systemPrompt = `Respond with care and understanding. ${systemPrompt}`;
+                    break;
+                case "friendly":
+                default:
+                    systemPrompt = `Respond in a friendly, approachable way. ${systemPrompt}`;
+                    break;
+            }
+        }
 
         // Build chat history string
         let chatHistory = "";

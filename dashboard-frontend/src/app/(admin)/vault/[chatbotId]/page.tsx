@@ -2,11 +2,19 @@
 
 "use client";
 import { useEffect, useState, useRef } from "react";
-import { useParams } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import Button from "@/components/ui/button/Button";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
 import { supabase } from "@/lib/supabase";
+
+const PERSONALITIES = [
+  { value: "friendly", label: "Friendly" },
+  { value: "professional", label: "Professional" },
+  { value: "enthusiastic", label: "Enthusiastic" },
+  { value: "concise", label: "Concise" },
+  { value: "empathetic", label: "Empathetic" },
+];
 
 type Source = {
   id: number;
@@ -42,21 +50,34 @@ export default function KnowledgeVaultPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [fileLoading, setFileLoading] = useState(false);
 
+  // Edit mode for chatbot customization
+  const [editMode, setEditMode] = useState(false);
+  const [name, setName] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
+  const [personality, setPersonality] = useState("friendly");
+  const [saveLoading, setSaveLoading] = useState(false);
+
   // Fetch chatbot info and sources
   const fetchAll = async () => {
     setLoading(true);
     setError(null);
     try {
-      // Fetch chatbot info from backend
-      const chatbotRes = await fetch(`http://localhost:8080/api/chatbot/${chatbotId}`);
-      const chatbotData = await chatbotRes.json();
-      setChatbot(chatbotData?.responseObject || null);
+      const res = await fetch(`http://localhost:8080/api/chatbot/${chatbotId}`);
+      const result = await res.json();
+      if (result?.responseObject) {
+        setChatbot(result.responseObject);
+        setName(result.responseObject.name || "");
+        setAvatarUrl(result.responseObject.avatar_url || "");
+        setLogoUrl(result.responseObject.logo_url || "");
+        setPersonality(result.responseObject.personality || "friendly");
+      }
       // Fetch sources from backend
       const sourcesRes = await fetch(`http://localhost:8080/api/chatbot/${chatbotId}/sources`);
       const sourcesData = await sourcesRes.json();
       setSources(sourcesData?.responseObject || []);
     } catch (err: any) {
-      setError("Failed to load chatbot or sources");
+      setError("Failed to load chatbot info.");
     }
     setLoading(false);
   };
@@ -185,6 +206,31 @@ export default function KnowledgeVaultPage() {
     setLoading(false);
   };
 
+  // Save chatbot customization
+  const handleSaveCustomization = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaveLoading(true);
+    setError(null);
+    const res = await fetch("http://localhost:8080/api/chatbot/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: chatbotId,
+        name,
+        avatar_url: avatarUrl,
+        logo_url: logoUrl,
+        personality,
+      }),
+    });
+    setSaveLoading(false);
+    if (!res.ok) {
+      setError("Failed to update chatbot customization.");
+      return;
+    }
+    setEditMode(false);
+    fetchAll();
+  };
+
   return (
     <div className="max-w-2xl mx-auto mt-10 mb-10">
       <h1 className="text-2xl font-bold mb-2">Knowledge Vault</h1>
@@ -196,6 +242,57 @@ export default function KnowledgeVaultPage() {
       )}
       {loading && <div>Loading...</div>}
       {error && <div className="text-red-500">{error}</div>}
+
+      {/* Chatbot Customization */}
+      <div className="mb-8 p-4 border rounded bg-white dark:bg-gray-900">
+        <div className="flex items-center gap-4 mb-2">
+          {chatbot?.avatar_url && (
+            <img src={chatbot.avatar_url} alt="Avatar" className="w-12 h-12 rounded-full" />
+          )}
+          {chatbot?.logo_url && (
+            <img src={chatbot.logo_url} alt="Logo" className="w-12 h-12 rounded" />
+          )}
+          <div>
+            <div className="font-bold text-lg">{chatbot?.name || chatbot?.business_name}</div>
+            <div className="text-xs text-gray-500">Personality: {chatbot?.personality}</div>
+          </div>
+          <Button size="sm" className="ml-auto" onClick={() => setEditMode((v) => !v)}>
+            {editMode ? "Cancel" : "Edit"}
+          </Button>
+        </div>
+        {editMode && (
+          <form onSubmit={handleSaveCustomization} className="space-y-3 mt-2">
+            <div>
+              <Label>Name</Label>
+              <Input value={name} onChange={e => setName(e.target.value)} required />
+            </div>
+            <div>
+              <Label>Avatar URL</Label>
+              <Input value={avatarUrl} onChange={e => setAvatarUrl(e.target.value)} placeholder="https://..." />
+            </div>
+            <div>
+              <Label>Logo URL</Label>
+              <Input value={logoUrl} onChange={e => setLogoUrl(e.target.value)} placeholder="https://..." />
+            </div>
+            <div>
+              <Label>Personality</Label>
+              <select
+                className="w-full border rounded p-2"
+                value={personality}
+                onChange={e => setPersonality(e.target.value)}
+                required
+              >
+                {PERSONALITIES.map((p) => (
+                  <option key={p.value} value={p.value}>{p.label}</option>
+                ))}
+              </select>
+            </div>
+            <Button type="submit" size="sm" disabled={saveLoading}>
+              {saveLoading ? "Saving..." : "Save"}
+            </Button>
+          </form>
+        )}
+      </div>
 
       {/* Add Manual Text */}
       <div className="mb-6">
@@ -271,7 +368,6 @@ export default function KnowledgeVaultPage() {
                   {src.title || src.source_name || src.source_type}
                 </span>
                 <Button
-                  // size="xs"
                   variant="outline"
                   className="ml-2"
                   onClick={() => handleDeleteSource(src.id)}

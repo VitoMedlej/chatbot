@@ -19,6 +19,8 @@ import { listKnowledgeSources } from "./services/chatbotListService";
 import { supabase } from "@/server";
 import { getChatbotById } from "./services/chatbotGetService";
 import { ingestManualText } from "./services/manualIngestService";
+import { updateChatbotService } from "./services/chatbotUpdateService";
+// import { updateChatbotService } from "./services/chatbotUpdateService"; // Import the update service
 
 
 class ChatbotController {
@@ -130,6 +132,11 @@ class ChatbotController {
 
     manualIngestHandler: RequestHandler = async (req, res) => {
         const serviceResponse = await ingestManualText(req);
+        return handleServiceResponse(serviceResponse, res);
+    };
+
+    updateChatbotHandler: RequestHandler = async (req, res) => {
+        const serviceResponse = await updateChatbotService(req);
         return handleServiceResponse(serviceResponse, res);
     };
 }

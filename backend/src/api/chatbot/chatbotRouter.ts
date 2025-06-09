@@ -21,6 +21,8 @@ chatbotRouter.get("/:chatbotId/sources/all", chatbotController.listKnowledgeSour
 chatbotRouter.get("/list", chatbotController.listUserChatbotsHandler);
 chatbotRouter.get("/:chatbotId", chatbotController.getChatbotByIdHandler);
 chatbotRouter.post("/manual-ingest", chatbotController.manualIngestHandler);
+chatbotRouter.post("/create", chatbotController.createChatbotHandler);
+chatbotRouter.post("/update", chatbotController.updateChatbotHandler); // Add update endpoint
 
 chatbotRouter.use("/persona", personaRouter);
 chatbotRouter.use("/file", fileRouter);

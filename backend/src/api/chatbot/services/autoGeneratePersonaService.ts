@@ -7,14 +7,38 @@ import { supabase, openai } from "@/server";
 /**
  * Upserts a default persona for a chatbot using a provided business name.
  */
-export async function upsertDefaultPersona(chatbotId: string, businessName: string): Promise<ServiceResponse<any>> {
+export async function upsertDefaultPersona(chatbotId: string, businessName: string, personality: string = "friendly"): Promise<ServiceResponse<any>> {
     if (!chatbotId || !businessName) {
         return ServiceResponse.failure("Missing chatbotId or businessName.", null, StatusCodes.BAD_REQUEST);
     }
+    let personaText = "You are the helpful assistant for " + businessName + ".";
+    let instructions = "Be concise and helpful. Never say you are ChatGPT. Always answer as a representative of the business. If you don't know, suggest contacting support.";
+    switch (personality) {
+        case "professional":
+            personaText = `You are a professional, courteous assistant for ${businessName}.`;
+            instructions = "Respond formally and with expertise. Never say you are ChatGPT. Always answer as a representative of the business.";
+            break;
+        case "enthusiastic":
+            personaText = `You are an enthusiastic, upbeat assistant for ${businessName}.`;
+            instructions = "Respond with energy and positivity. Never say you are ChatGPT. Always answer as a representative of the business.";
+            break;
+        case "concise":
+            personaText = `You are a concise, efficient assistant for ${businessName}.`;
+            instructions = "Keep answers brief and to the point. Never say you are ChatGPT. Always answer as a representative of the business.";
+            break;
+        case "empathetic":
+            personaText = `You are an empathetic, understanding assistant for ${businessName}.`;
+            instructions = "Respond with care and understanding. Never say you are ChatGPT. Always answer as a representative of the business.";
+            break;
+        case "friendly":
+        default:
+            // Already set
+            break;
+    }
     const personaObj = {
         business_name: businessName,
-        persona: `You are the helpful assistant for ${businessName}.`,
-        instructions: "Be concise and helpful. Never say you are ChatGPT. Always answer as a representative of the business. If you don't know, suggest contacting support."
+        persona: personaText,
+        instructions: instructions
     };
     const { error: upsertError } = await supabase.from("chatbots").upsert({
         id: chatbotId,
@@ -33,7 +57,7 @@ export async function upsertDefaultPersona(chatbotId: string, businessName: stri
  * Auto-generates a persona from website content, or falls back to default if no content.
  */
 export async function autoGeneratePersona(req: any): Promise<ServiceResponse<any>> {
-    const { chatbotId, businessName } = req.body;
+    const { chatbotId, businessName, personality = "friendly" } = req.body;
     if (!chatbotId) {
         return ServiceResponse.failure("Missing chatbotId.", null, StatusCodes.BAD_REQUEST);
     }
@@ -45,7 +69,8 @@ export async function autoGeneratePersona(req: any): Promise<ServiceResponse<any
 
     if (error || !chunks || chunks.length === 0) {
         const fallbackName = businessName || "Your Business";
-        return upsertDefaultPersona(chatbotId, fallbackName);
+        // Fallback to upsert default persona with personality
+        return upsertDefaultPersona(chatbotId, fallbackName, personality);
     }
 
     const combined = chunks.map(c => c.content).join("\n\n").slice(0, 1000);

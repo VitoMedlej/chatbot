@@ -10,3 +10,19 @@ export type ChatbotResponse = z.infer<typeof ChatbotResponseSchema>;
 export const ChatbotResponseSchema = z.object({
   answer: z.string(),
 });
+
+export type ChatbotPersonality = "friendly" | "professional" | "enthusiastic" | "concise" | "empathetic";
+
+export type Chatbot = {
+  id: number;
+  name: string;
+  avatar_url?: string | null;
+  logo_url?: string | null;
+  personality: ChatbotPersonality;
+  business_name: string;
+  persona: string;
+  instructions: string;
+  setup_complete: boolean;
+  created_at: string;
+  updated_at: string;
+};

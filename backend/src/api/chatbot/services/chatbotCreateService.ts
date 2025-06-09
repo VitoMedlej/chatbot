@@ -7,7 +7,7 @@ import { autoGeneratePersona } from "./autoGeneratePersonaService";
 
 export async function createChatbotService(req: any): Promise<ServiceResponse<any>> {
     try {
-        const { business_name, user_id } = req.body;
+        const { business_name, user_id, name, avatar_url, logo_url, personality } = req.body;
 
         // Validate input
         if (!business_name || typeof business_name !== "string" || business_name.length < 2) {
@@ -16,11 +16,17 @@ export async function createChatbotService(req: any): Promise<ServiceResponse<an
         if (!user_id || typeof user_id !== "string" || user_id.length < 8) {
             return ServiceResponse.failure("Invalid or missing user_id", null);
         }
+        if (!name || typeof name !== "string" || name.length < 2) {
+            return ServiceResponse.failure("Invalid or missing chatbot name", null);
+        }
+        if (!personality || !["friendly", "professional", "enthusiastic", "concise", "empathetic"].includes(personality)) {
+            return ServiceResponse.failure("Invalid or missing personality", null);
+        }
 
-        // Insert chatbot with user_id as UUID string
+        // Insert chatbot with custom fields
         const { data, error } = await supabase
             .from("chatbots")
-            .insert([{ business_name, user_id }])
+            .insert([{ business_name, user_id, name, avatar_url, logo_url, personality }])
             .select("id")
             .single();
 
@@ -33,11 +39,11 @@ export async function createChatbotService(req: any): Promise<ServiceResponse<an
         }
 
         if (!data || !data.id) {
-            return ServiceResponse.failure("Failed to create chatbot. No ID returned.", null);
+            return ServiceResponse.failure("Failed to create chatbot.", null);
         }
 
         // After chatbot creation, scraping, and ingestion, auto-generate persona automatically
-        await autoGeneratePersona({ body: { chatbotId: data.id, businessName: business_name } });
+        await autoGeneratePersona({ body: { chatbotId: data.id, businessName: business_name, personality } });
 
         return ServiceResponse.success("Chatbot created and persona auto-generated.", { id: data.id });
     } catch (err: any) {
