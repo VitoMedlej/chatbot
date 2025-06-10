@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { apiUrl } from "@/lib/server";
 import Button from "@/components/ui/button/Button";
 
 export default function ChatbotManagementPage() {
@@ -20,7 +21,7 @@ export default function ChatbotManagementPage() {
         router.replace("/signin");
         return;
       }
-      const res = await fetch(`http://localhost:8080/api/chatbot/list?user_id=${user.id}`);
+      const res = await fetch(apiUrl(`/api/chatbot/list?user_id=${user.id}`));
       const result = await res.json();
       setChatbots(result.responseObject || []);
       setLoading(false);

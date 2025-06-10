@@ -1,12 +1,11 @@
 // Chatbot Playground/Test Page for a specific chatbot (production logic)
 
 "use client";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import Button from "@/components/ui/button/Button";
-import Input from "@/components/form/input/InputField";
 import { supabase } from "@/lib/supabase";
 import KnowledgeCheck from "@/components/KnowledgeCheck";
+import { apiUrl } from "@/lib/server";
 
 export default function ChatbotPlaygroundPage() {
   const router = useRouter();
@@ -14,92 +13,201 @@ export default function ChatbotPlaygroundPage() {
   const chatbotId = params?.chatbotId as string;
 
   const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
+  console.log('messages: ', messages);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  const [chatbot, setChatbot] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [contextChunks, setContextChunks] = useState<any[]>([]);
+  const [contextLoading, setContextLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Get the real userId from Supabase Auth
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
+    (async () => {
+      const { data } = await supabase.auth.getUser();
       setUserId(data?.user?.id ?? null);
-    });
+    })();
   }, []);
+
+  // Fetch chatbot info (persona/instructions)
+  useEffect(() => {
+    if (!chatbotId) return;
+    (async () => {
+      try {
+        const res = await fetch(apiUrl(`/api/chatbot/${chatbotId}`));
+        const data = await res.json();
+        if (data?.success && data?.data) setChatbot(data.data);
+        else setError("Failed to load chatbot info.");
+      } catch {
+        setError("Failed to load chatbot info.");
+      }
+    })();
+  }, [chatbotId]);
+
+  // Fetch context chunks for display
+  useEffect(() => {
+    if (!chatbotId) return;
+    setContextLoading(true);
+    (async () => {
+      try {
+        const res = await fetch(apiUrl(`/api/chatbot/${chatbotId}/sources`));
+        const data = await res.json();
+        setContextChunks(data?.responseObject || []);
+      } finally {
+        setContextLoading(false);
+      }
+    })();
+  }, [chatbotId]);
 
   const sendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!input.trim() || loading || !userId) return;
+    setError(null);
     const userMessage = { role: "user", content: input.trim() };
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setLoading(true);
-
-    const res = await fetch("http://localhost:8080/api/chatbot/chat-context", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId,
-        chatbotId,
-        message: userMessage.content,
-      }),
-    });
-    const result = await res.json();
-    setLoading(false);
-    if (result?.responseObject) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: result.responseObject },
-      ]);
-    } else {
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: "Sorry, something went wrong." },
-      ]);
+    try {
+      const res = await fetch(apiUrl("/api/chatbot/chat-context"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          chatbotId,
+          message: userMessage.content,
+        }),
+      });
+      const data = await res.json();
+      let assistantReply = null;
+      if (data?.success) {
+        // Support both possible response shapes
+        if (typeof data.responseObject === "string") {
+          assistantReply = data.responseObject;
+        } else if (typeof data.data === "string") {
+          assistantReply = data.data;
+        }
+      }
+      if (!res.ok || !data?.success || !assistantReply) {
+        setError(data?.message || "Failed to get answer.");
+        setLoading(false);
+        return;
+      }
+      setMessages((prev) => [...prev, { role: "assistant", content: assistantReply }]);
+    } catch (err: any) {
+      setError("Network error. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    inputRef.current?.focus();
   };
 
+  useEffect(() => {
+    if (inputRef.current) inputRef.current.focus();
+  }, [inputRef, loading]);
+
   if (!userId) {
-    return <div className="p-8 text-center">Loading...</div>;
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-gray-500">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-400 mb-4" />
+        <div>Loading user session…</div>
+      </div>
+    );
   }
 
   return (
-    <div className="max-w-2xl mx-auto mt-10 mb-10">
-      <KnowledgeCheck chatbotId={chatbotId} />
-      <div className="rounded-2xl border border-gray-200 bg-white p-8 dark:border-gray-800 dark:bg-white/[0.03] shadow-theme-md">
-        <h1 className="text-2xl font-bold mb-2">Chatbot Playground</h1>
-        <div className="h-80 overflow-y-auto border rounded p-4 bg-gray-50 dark:bg-gray-900 mb-4">
+    <div className="max-w-2xl mx-auto py-8 px-2">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold mb-1">Chatbot Playground</h1>
+        {chatbot && (
+          <div className="bg-gray-50 border rounded p-3 mb-2">
+            <div className="font-semibold text-lg">{chatbot.name}</div>
+            <div className="text-sm text-gray-700 mb-1">{chatbot.business_name}</div>
+            <div className="text-xs text-gray-500 mb-1">Personality: {chatbot.personality}</div>
+            <div className="text-xs text-gray-600 mb-1">Persona: {chatbot.persona}</div>
+            <div className="text-xs text-gray-600">Instructions: {chatbot.instructions}</div>
+          </div>
+        )}
+      </div>
+      <div className="bg-white border rounded-lg shadow p-4 min-h-[350px] flex flex-col">
+        <div className="flex-1 overflow-y-auto mb-2">
           {messages.length === 0 && (
-            <div className="text-gray-400 text-center">Start chatting with your bot…</div>
+            <div className="text-gray-400 text-center py-8">Start chatting with your chatbot…</div>
           )}
           {messages.map((msg, i) => (
-            <div key={i} className={`mb-2 ${msg.role === "user" ? "text-right" : "text-left"}`}>
-              <span
-                className={`inline-block px-3 py-2 rounded-lg ${
+            <div key={i} className={`mb-2 flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div
+                className={`max-w-[80%] px-4 py-2 rounded-lg text-sm whitespace-pre-line ${
                   msg.role === "user"
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-200 text-gray-800 dark:bg-gray-800 dark:text-gray-100"
+                    ? "bg-blue-600 text-white rounded-br-none"
+                    : "bg-gray-100 text-gray-900 rounded-bl-none border"
                 }`}
               >
                 {msg.content}
-              </span>
+              </div>
             </div>
           ))}
+          {loading && (
+            <div className="mb-2 flex justify-start">
+              <div className="max-w-[80%] px-4 py-2 rounded-lg text-sm bg-gray-100 text-gray-400 border rounded-bl-none animate-pulse">
+                Thinking…
+              </div>
+            </div>
+          )}
         </div>
-        <form onSubmit={sendMessage} className="flex gap-2">
-          <Input
-            // ref={inputRef}
+        <form onSubmit={sendMessage} className="flex gap-2 mt-2">
+          <input
+            ref={inputRef}
+            className="flex-1 border rounded px-3 py-2 focus:outline-none"
+            placeholder="Type your message…"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Type your message…"
-            className="flex-1"
             disabled={loading}
-            // autoFocus
+            maxLength={1000}
+            autoFocus
           />
-          <Button type="submit" disabled={loading || !input.trim()}>
+          <button
+            type="submit"
+            className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50"
+            disabled={loading || !input.trim()}
+          >
             Send
-          </Button>
+          </button>
         </form>
+        {error && <div className="text-red-500 text-xs mt-2">{error}</div>}
+      </div>
+      <div className="mt-8">
+        <h2 className="font-semibold mb-2 text-lg">Knowledge Context</h2>
+        {contextLoading ? (
+          <div className="text-gray-400">Loading context…</div>
+        ) : contextChunks.length === 0 ? (
+          <div className="text-gray-400">No knowledge sources found for this chatbot.</div>
+        ) : (
+          <div className="space-y-2">
+            {contextChunks.slice(0, 8).map((chunk: any, i: number) => (
+              <div key={i} className="bg-gray-50 border rounded p-2 text-xs">
+                <div className="mb-1 font-semibold text-gray-700 truncate">
+                  {chunk.source_name || chunk.source_url ? (
+                    <a
+                      href={ chunk.source_name || chunk.source_url }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 underline"
+                    >
+                      {chunk.source_name || chunk.source_url}
+                    </a>
+                  ) : (
+                    <span>No source URL</span>
+                  )}
+                </div>
+                <div className="text-gray-800 whitespace-pre-line">{chunk.content}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="mt-8">
+        <KnowledgeCheck chatbotId={chatbotId} />
       </div>
     </div>
   );

@@ -44,17 +44,32 @@ export async function extractWebsiteInfo(req: any): Promise<ServiceResponse<any>
             }))
             .filter(b => b.text);
 
+        // Deduplicate: check if content already exists for this chatbot and url
+        const content = article?.textContent || "";
+        const { data: existing, error: existingError } = await supabase
+            .from("chatbot_knowledge")
+            .select("id")
+            .eq("chatbot_id", chatbotId)
+            .eq("source_name", url)
+            .eq("content", content);
+        if (existingError) {
+            return ServiceResponse.failure("Failed to check for duplicates.", null, StatusCodes.INTERNAL_SERVER_ERROR);
+        }
+        if (existing && existing.length > 0) {
+            return ServiceResponse.success("Duplicate content detected. Skipping ingestion.", null);
+        }
+
         const extractionResult = {
             url,
             title: article?.title || doc.title || "Untitled", // Fallback title
             description: article?.excerpt || "",
-            content: article?.textContent || "",
+            content,
             links: anchors,
             buttons: buttons
         };
 
         // Insert into chatbot_knowledge
-        const { error: knowledgeError } = await supabase.from("chatbot_knowledge").insert([
+        const { data: inserted, error: knowledgeError } = await supabase.from("chatbot_knowledge").insert([
             {
                 chatbot_id: chatbotId,
                 user_id: userId,
@@ -67,7 +82,7 @@ export async function extractWebsiteInfo(req: any): Promise<ServiceResponse<any>
                 buttons: extractionResult.buttons,
                 metadata: null
             }
-        ]);
+        ]).select();
 
         if (knowledgeError) {
             console.error("Error inserting into chatbot_knowledge:", knowledgeError);
@@ -93,9 +108,13 @@ export async function extractWebsiteInfo(req: any): Promise<ServiceResponse<any>
             const ingestResponse = await ingestText(mockIngestReq);
 
             if (!ingestResponse.success) {
+                // Rollback: delete the just-inserted chatbot_knowledge row
+                if (inserted && inserted[0] && inserted[0].id) {
+                    await supabase.from("chatbot_knowledge").delete().eq("id", inserted[0].id);
+                }
                 console.warn("Website info saved to knowledge base, but failed to ingest text for embeddings:", ingestResponse.message);
-                return ServiceResponse.success(
-                    "Website info extracted and saved to knowledge base. Embedding process initiated (check logs for status).",
+                return ServiceResponse.failure(
+                    "Website info extracted but embedding failed. Rolled back knowledge base entry.",
                     extractionResult
                 );
             } else {

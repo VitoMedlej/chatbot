@@ -7,6 +7,7 @@ import Button from "@/components/ui/button/Button";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
 import { supabase } from "@/lib/supabase";
+import { apiUrl } from "@/lib/server";
 
 const PERSONALITIES = [
   { value: "friendly", label: "Friendly" },
@@ -63,7 +64,7 @@ export default function KnowledgeVaultPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`http://localhost:8080/api/chatbot/${chatbotId}`);
+      const res = await fetch(apiUrl(`/api/chatbot/${chatbotId}`));
       const result = await res.json();
       if (result?.responseObject) {
         setChatbot(result.responseObject);
@@ -73,7 +74,7 @@ export default function KnowledgeVaultPage() {
         setPersonality(result.responseObject.personality || "friendly");
       }
       // Fetch sources from backend
-      const sourcesRes = await fetch(`http://localhost:8080/api/chatbot/${chatbotId}/sources`);
+      const sourcesRes = await fetch(apiUrl(`/api/chatbot/${chatbotId}/sources`));
       const sourcesData = await sourcesRes.json();
       setSources(sourcesData?.responseObject || []);
     } catch (err: any) {
@@ -92,7 +93,7 @@ export default function KnowledgeVaultPage() {
     setManualLoading(true);
     setError(null);
     // Call backend API, not Supabase directly
-    const res = await fetch("http://localhost:8080/api/chatbot/manual-ingest", {
+    const res = await fetch(apiUrl("/api/chatbot/manual-ingest"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -129,7 +130,7 @@ export default function KnowledgeVaultPage() {
       return;
     }
 
-    const res = await fetch("http://localhost:8080/api/chatbot/website/extract-website", {
+    const res = await fetch(apiUrl("/api/chatbot/website/extract-website"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -166,7 +167,7 @@ export default function KnowledgeVaultPage() {
       formData.append("file", file);
       formData.append("chatbotId", chatbotId);
 
-      const res = await fetch("http://localhost:8080/api/chatbot/website/upload-file", {
+      const res = await fetch(apiUrl("/api/chatbot/website/upload-file"), {
         method: "POST",
         body: formData,
       });
@@ -211,7 +212,7 @@ export default function KnowledgeVaultPage() {
     e.preventDefault();
     setSaveLoading(true);
     setError(null);
-    const res = await fetch("http://localhost:8080/api/chatbot/update", {
+    const res = await fetch(apiUrl("/api/chatbot/update"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

@@ -7,6 +7,7 @@ import Button from "@/components/ui/button/Button";
 import Label from "@/components/form/Label";
 import { ChevronLeftIcon } from "@/icons";
 import PageSelectionStep from "./components/PageSelectionStep";
+import { apiUrl } from "@/lib/server";
 
 type Step = 1 | 2 | 3;
 
@@ -31,7 +32,7 @@ export default function ChatbotSetupPage() {
         return;
       }
       try {
-        const res = await fetch(`http://localhost:8080/api/chatbot/${chatbotId}`);
+        const res = await fetch(apiUrl(`/api/chatbot/${chatbotId}`));
         const data = await res.json();
         if (!data || data.setup_complete) {
           router.replace(`/vault/${chatbotId}`);
@@ -49,7 +50,7 @@ export default function ChatbotSetupPage() {
   useEffect(() => {
     const fetchChunks = async () => {
       setLoading(true);
-      const res = await fetch(`http://localhost:8080/api/chatbot/list-chunks`, {
+      const res = await fetch(apiUrl("/api/chatbot/list-chunks"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ chatbotId: Number(chatbotId) }),
@@ -73,7 +74,7 @@ export default function ChatbotSetupPage() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const res = await fetch("http://localhost:8080/api/chatbot/website-links", {
+    const res = await fetch(apiUrl("/api/chatbot/website-links"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url: website }),
@@ -99,7 +100,7 @@ export default function ChatbotSetupPage() {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:8080/api/chatbot/crawl-and-ingest", {
+      const res = await fetch(apiUrl("/api/chatbot/crawl-and-ingest"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -113,7 +114,7 @@ export default function ChatbotSetupPage() {
         throw new Error(result.message || "Failed to crawl website.");
       }
       setScrapedPages(result.responseObject?.crawledUrls || []);
-      await fetch("http://localhost:8080/api/chatbot/auto-generate-persona", {
+      await fetch(apiUrl("/api/chatbot/auto-generate-persona"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ chatbotId }),
@@ -136,7 +137,7 @@ export default function ChatbotSetupPage() {
         .split("\n")
         .map((l) => l.trim())
         .filter((l) => l.startsWith("http"));
-      const res = await fetch("http://localhost:8080/api/chatbot/manual-links", {
+      const res = await fetch(apiUrl("/api/chatbot/manual-links"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

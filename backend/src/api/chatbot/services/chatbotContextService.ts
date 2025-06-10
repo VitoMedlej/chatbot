@@ -69,11 +69,10 @@ export async function chatWithContext(req: any): Promise<ServiceResponse<null | 
             return ServiceResponse.failure("Failed to generate embedding.", null, StatusCodes.INTERNAL_SERVER_ERROR);
         }
 
-
         const { data: chunks, error: chunkError } = await supabase.rpc("match_document_chunks", {
             query_embedding: embedding,
             match_threshold: 0.75,
-            match_count: 3,
+            match_count: 8, // fetch more for deduplication
             chatbot_id: numericChatbotId.toString(), // Cast to UUID
         });
 
@@ -82,9 +81,22 @@ export async function chatWithContext(req: any): Promise<ServiceResponse<null | 
             return ServiceResponse.failure("Failed to retrieve knowledge base context.", null, StatusCodes.INTERNAL_SERVER_ERROR);
         }
 
+        // Deduplicate and filter context chunks
+        let filteredChunks: any[] = [];
+        if (chunks && chunks.length > 0) {
+            const seen = new Set();
+            for (const chunk of chunks) {
+                const key = (chunk.content || "").trim().toLowerCase();
+                if (!key || key.length < 20) continue; // skip empty/short
+                if (seen.has(key)) continue;
+                seen.add(key);
+                filteredChunks.push(chunk);
+                if (filteredChunks.length >= 3) break; // limit to 3 unique
+            }
+        }
 
-        // Check if chunks are empty and provide a fallback response
-        if (!chunks || chunks.length === 0) {
+        // Check if filteredChunks are empty and provide a fallback response
+        if (!filteredChunks || filteredChunks.length === 0) {
             console.warn("No knowledge base data available. Providing fallback response.");
             const fallbackResponse = "I'm sorry, I currently don't have enough information to answer that. Please try asking something else or contact support.";
 
@@ -136,9 +148,9 @@ export async function chatWithContext(req: any): Promise<ServiceResponse<null | 
 
         // Build knowledge context string
         let knowledgeContext = "";
-        if (chunks && chunks.length > 0) {
+        if (filteredChunks && filteredChunks.length > 0) {
             knowledgeContext += "\nKnowledge Base Context:\n";
-            chunks.forEach((chunk: any, idx: number) => {
+            filteredChunks.forEach((chunk: any, idx: number) => {
                 let meta = "";
                 if (chunk.title) meta += `Title: ${chunk.title}\n`;
                 if (chunk.source_url) meta += `URL: ${chunk.source_url}\n`;
