@@ -10,6 +10,10 @@ import { createClient } from "@supabase/supabase-js";
 // Keeping rate limiter, as it was in your old package.json and is a good practice
 import rateLimit from "express-rate-limit";
 import { chatbotRouter } from "./api/chatbot/chatbotRouter";
+import { healthCheckRouter } from "./api/healthCheck/healthCheckRouter";
+import authenticateRequest from "./common/middleware/authHandler"; // THIS IS THE MIDDLEWARE
+import { sanitizeInput } from "./common/middleware/inputValidation";
+import { env } from "./common/utils/envConfig";
 
 
 // --- Load Environment Variables ---
@@ -32,24 +36,31 @@ export const supabase = createClient(
 
 // --- Middleware Setup ---
 
-// Basic CORS configuration
-const allowedOrigins = [
-  "http://localhost:3000", // Your Dashboard Frontend (Next.js default dev port)
-  "http://localhost:3001", // Your Embeddable Chatbot Frontend (if on another port)
-  // !!! IMPORTANT: Add your production frontend domains here when deployed to Vercel etc. !!!
-  // e.g., "https://your-dashboard.vercel.app",
-  // e.g., "https://your-chatbot-embed.vercel.app",
-];
+// Production-ready CORS configuration
+const allowedOrigins = env.NODE_ENV === 'production' 
+  ? [
+      env.FRONTEND_URL || "https://your-dashboard.vercel.app",
+      env.EMBED_FRONTEND_URL || "https://your-chatbot-embed.vercel.app",
+      // Add other production domains as needed
+    ]
+  : [
+      "http://localhost:3000", // Dashboard Frontend (Next.js default dev port)
+      "http://localhost:3001", // Embeddable Chatbot Frontend
+      "http://127.0.0.1:3000",
+      "http://127.0.0.1:3001",
+    ];
 
 app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like direct API calls or mobile apps)
-      // or if it's a whitelisted origin, or in development mode
-      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV === "development") {
+  cors({    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, postman, etc.) only in development
+      if (!origin && env.NODE_ENV !== 'production') {
+        return callback(null, true);
+      }
+      
+      if (allowedOrigins.includes(origin || '')) {
         callback(null, true);
       } else {
-        callback(new Error("Not allowed by CORS"));
+        callback(new Error(`Origin ${origin} not allowed by CORS policy`));
       }
     },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], // Keep relevant methods
@@ -58,21 +69,47 @@ app.use(
   })
 );
 
-// Helmet for basic security headers
-app.use(helmet());
+// Helmet for comprehensive security headers
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"],
+    },
+  },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true
+  }
+}));
 
 // Trust proxy for proper IP detection when deployed behind a load balancer/proxy
-// app.set("trust proxy", true);
+app.set("trust proxy", 1);
 
 // Parse JSON and URL-encoded request bodies
 app.use(express.json({ limit: '1mb' })); // Increase limit for potentially large text inputs
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
-// Global Rate Limiter
+// Apply input sanitization to all routes
+app.use(sanitizeInput);
+
+// Production-ready Rate Limiter
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // Limit each IP to 1000 requests per windowMs
-  message: "Too many requests from this IP, please try again after 15 minutes",
+  max: env.NODE_ENV === 'production' ? 100 : 1000, // Stricter limits in production
+  message: {
+    error: "Too many requests from this IP, please try again after 15 minutes",
+    retryAfter: "15 minutes"
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for health checks
+    return req.path === '/api/health-check';
+  }
 });
 app.use(apiLimiter); // Apply this to all routes
 
@@ -90,12 +127,16 @@ app.options("/api/*", (req, res) => {
 // import { managementRoutes } from "./routes/managementRoutes";
 // import { healthCheckRouter } from "./api/healthCheck/healthCheckRouter"; // Assuming this is a simple self-contained file
 
-// --- Health Check Route (Keeping it simple) ---
-// You can keep this route here or move it to a specific healthCheckRouter.ts
+// --- Health Check Route (Public - No Auth Required) ---
 app.get("/api/health-check", (req, res) => {
   res.status(200).json({ status: "ok", message: "Chatbot Backend is running!" });
 });
-app.use("/api/chatbot", chatbotRouter);
+
+// Public routes (no authentication required)
+app.use("/health-check", healthCheckRouter);
+
+// Protected routes (authentication required)
+app.use("/api/chatbot", authenticateRequest, chatbotRouter); // This line is correct
 
 // --- Apply Your New Routes Here ---
 // app.use("/api", chatbotRoutes);     // Example: for /api/ingest-text, /api/chat
@@ -106,15 +147,26 @@ app.use("/api/chatbot", chatbotRouter);
 // This catches any errors thrown by your routes or other middleware
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   console.error('An unhandled error occurred:', err); // Log the error for debugging
+  
   const statusCode = err.statusCode || 500;
-  const message = err.message || 'An unexpected server error occurred.';
-  res.status(statusCode).json({
+    // Don't expose internal error details in production
+  const message = env.NODE_ENV === 'production' 
+    ? (statusCode === 500 ? 'Internal server error' : err.message || 'An error occurred')
+    : (err.message || 'An unexpected server error occurred.');
+  
+  const errorResponse: any = {
     error: {
       message: message,
-      // Only send stack trace in development for security
-      ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+      status: statusCode,
+      timestamp: new Date().toISOString(),
     },
-  });
+  };
+    // Only send stack trace in development for security
+  if (env.NODE_ENV === 'development') {
+    errorResponse.error.stack = err.stack;
+  }
+  
+  res.status(statusCode).json(errorResponse);
 });
 
 export const logger = {

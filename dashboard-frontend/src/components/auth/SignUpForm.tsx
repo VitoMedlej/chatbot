@@ -18,7 +18,6 @@ export default function SignUpForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) router.replace("/dashboard");

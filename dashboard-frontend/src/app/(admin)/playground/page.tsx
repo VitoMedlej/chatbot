@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { apiUrl } from "@/lib/server";
+import { apiClient } from "@/lib/apiClient";
 import Button from "@/components/ui/button/Button";
 
 
@@ -12,20 +12,22 @@ export default function PlaygroundSelectorPage() {
   const [chatbots, setChatbots] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
-
-  useEffect(() => {
+  const router = useRouter();  useEffect(() => {
     const fetchChatbots = async () => {
       setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.replace("/signin");
-        return;
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          router.replace("/signin");
+          return;
+        }
+        const res = await apiClient.get<any>(`/api/chatbot/list?user_id=${user.id}`);
+        setChatbots(res.responseObject || []);
+        setLoading(false);
+      } catch (error) {
+        setError("Failed to load chatbots.");
+        setLoading(false);
       }
-      const res = await fetch(apiUrl(`/api/chatbot/list?user_id=${user.id}`));
-      const result = await res.json();
-      setChatbots(result.responseObject || []);
-      setLoading(false);
     };
     fetchChatbots();
   }, [router]);

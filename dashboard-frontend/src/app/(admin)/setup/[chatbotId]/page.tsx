@@ -7,7 +7,7 @@ import Button from "@/components/ui/button/Button";
 import Label from "@/components/form/Label";
 import { ChevronLeftIcon } from "@/icons";
 import PageSelectionStep from "./components/PageSelectionStep";
-import { apiUrl } from "@/lib/server";
+import { apiClient } from "@/lib/apiClient";
 
 type Step = 1 | 2 | 3;
 
@@ -23,18 +23,15 @@ export default function ChatbotSetupPage() {
   const [error, setError] = useState<string | null>(null);
   const [allPages, setAllPages] = useState<string[]>([]);
   const [selectedPages, setSelectedPages] = useState<string[]>([]);
-  const [scrapedPages, setScrapedPages] = useState<string[]>([]);
-
-  useEffect(() => {
+  const [scrapedPages, setScrapedPages] = useState<string[]>([]);  useEffect(() => {
     async function checkSetup() {
       if (!chatbotId) {
         router.replace("/(admin)");
         return;
       }
       try {
-        const res = await fetch(apiUrl(`/api/chatbot/${chatbotId}`));
-        const data = await res.json();
-        if (!data || data.setup_complete) {
+        const res = await apiClient.get<any>(`/api/chatbot/${chatbotId}`);
+        if (!res || res.setup_complete) {
           router.replace(`/vault/${chatbotId}`);
           return;
         }
@@ -45,48 +42,48 @@ export default function ChatbotSetupPage() {
       }
     }
     checkSetup();
-  }, [chatbotId, router]);
-
-  useEffect(() => {
+  }, [chatbotId, router]);  useEffect(() => {
     const fetchChunks = async () => {
       setLoading(true);
-      const res = await fetch(apiUrl("/api/chatbot/list-chunks"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chatbotId: Number(chatbotId) }),
-      });
-      const result = await res.json();
-      if (result?.responseObject?.length) {
-        setScrapedPages(
-          result.responseObject
-            .map((c: any) => c.source_url)
-            .filter((v: string | null) => !!v)
-        );
-        setStep(2);
+      try {
+        const res = await apiClient.post<any>("/api/chatbot/list-chunks", {
+          chatbotId: Number(chatbotId)
+        });
+        if (res?.responseObject?.length) {
+          setScrapedPages(
+            res.responseObject
+              .map((c: any) => c.source_url)
+              .filter((v: string | null) => !!v)
+          );
+          setStep(2);
+        }
+        setLoading(false);
+      } catch (error) {
+        console.error("Failed to fetch chunks:", error);
+        setLoading(false);
       }
-      setLoading(false);
     };
     if (chatbotId && chatbotId !== "undefined") fetchChunks();
-  }, [chatbotId]);
-
-  // Step 1: Enter website and fetch links for selection
+  }, [chatbotId]);  // Step 1: Enter website and fetch links for selection
   const handleFetchLinks = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const res = await fetch(apiUrl("/api/chatbot/website-links"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: website }),
-    });
-    const result = await res.json();
-    setLoading(false);
-    if (!res.ok || !Array.isArray(result.responseObject)) {
-      setError(result.message || "Failed to fetch links.");
-      return;
+    try {
+      const res = await apiClient.post<any>("/api/chatbot/website-links", {
+        url: website
+      });
+      setLoading(false);
+      if (!Array.isArray(res.responseObject)) {
+        setError(res.message || "Failed to fetch links.");
+        return;
+      }
+      setAllPages(res.responseObject);
+      setSelectedPages(res.responseObject.slice(0, 100)); // Preselect first 100
+    } catch (error: any) {
+      setLoading(false);
+      setError(error.response?.data?.message || "Failed to fetch links.");
     }
-    setAllPages(result.responseObject);
-    setSelectedPages(result.responseObject.slice(0, 100)); // Preselect first 10
   };
 
   // Step 1b: User selects pages to crawl
@@ -94,40 +91,26 @@ export default function ChatbotSetupPage() {
     setSelectedPages((prev) =>
       prev.includes(url) ? prev.filter((u) => u !== url) : [...prev, url]
     );
-  };
-
-  const handleCrawlSelected = async () => {
+  };  const handleCrawlSelected = async () => {
     setError(null);
     setLoading(true);
     try {
-      const res = await fetch(apiUrl("/api/chatbot/crawl-and-ingest"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: website,
-          chatbotId,
-          selectedUrls: selectedPages,
-        }),
+      const res = await apiClient.post<any>("/api/chatbot/crawl-and-ingest", {
+        url: website,
+        chatbotId,
+        selectedUrls: selectedPages,
       });
-      const result = await res.json();
-      if (!res.ok) {
-        throw new Error(result.message || "Failed to crawl website.");
-      }
-      setScrapedPages(result.responseObject?.crawledUrls || []);
-      await fetch(apiUrl("/api/chatbot/auto-generate-persona"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chatbotId }),
+      setScrapedPages(res.responseObject?.crawledUrls || []);
+      await apiClient.post<any>("/api/chatbot/auto-generate-persona", {
+        chatbotId
       });
       setStep(2);
     } catch (error: any) {
-      setError(error.message);
+      setError(error.response?.data?.message || "Failed to crawl website.");
     } finally {
       setLoading(false);
     }
-  };
-
-  // Ingest manual links
+  };  // Ingest manual links
   const handleIngestManualLinks = async () => {
     if (!manualLinks.trim()) return;
     setLoading(true);
@@ -137,22 +120,14 @@ export default function ChatbotSetupPage() {
         .split("\n")
         .map((l) => l.trim())
         .filter((l) => l.startsWith("http"));
-      const res = await fetch(apiUrl("/api/chatbot/manual-links"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chatbotId,
-          links,
-        }),
+      const res = await apiClient.post<any>("/api/chatbot/manual-links", {
+        chatbotId,
+        links,
       });
-      const result = await res.json();
-      if (!res.ok) {
-        throw new Error(result.message || "Failed to ingest links.");
-      }
-      setScrapedPages(result.responseObject?.crawledUrls || []);
+      setScrapedPages(res.responseObject?.crawledUrls || []);
       setStep(2);
     } catch (error: any) {
-      setError(error.message);
+      setError(error.response?.data?.message || "Failed to ingest links.");
     } finally {
       setLoading(false);
     }

@@ -27,15 +27,35 @@ export async function extractWebsiteInfo(req: any): Promise<ServiceResponse<any>
         const dom = new JSDOM(html, { url });
         const doc = dom.window.document;
 
+        // Get root domain for filtering
+        const rootDomain = (new URL(url)).hostname.replace(/^www\./, "");
+
         const reader = new Readability(doc);
         const article = reader.parse();
 
+        // Only keep internal links (same root domain), deduplicate by href, and filter out phone number links
+        const seenHrefs = new Set<string>();
         const anchors = Array.from(doc.querySelectorAll("a"))
             .map(a => ({
                 text: a.textContent?.trim() || "",
                 href: a.href
             }))
-            .filter(a => a.href && a.text);
+            .filter(a => {
+                if (!a.href || !a.text) return false;
+                try {
+                    const linkUrl = new URL(a.href, url);
+                    const linkDomain = linkUrl.hostname.replace(/^www\./, "");
+                    // Exclude tel: and mailto: and phone-number-like links
+                    if (linkUrl.href.startsWith("mailto:") || linkUrl.href.startsWith("tel:")) return false;
+                    if (/(\+?\d{6,})/.test(a.text) || /(\+?\d{6,})/.test(linkUrl.pathname)) return false;
+                    if (linkDomain !== rootDomain) return false;
+                    if (seenHrefs.has(linkUrl.href)) return false;
+                    seenHrefs.add(linkUrl.href);
+                    return true;
+                } catch {
+                    return false;
+                }
+            });
         
         const buttons = Array.from(doc.querySelectorAll("button,input[type='button'],input[type='submit']"))
             .map(b => ({

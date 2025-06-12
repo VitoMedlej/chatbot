@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiUrl } from "@/lib/server";
+import { apiClient } from "@/lib/apiClient";
 
 interface KnowledgeCheckProps {
   chatbotId: string;
@@ -16,8 +16,8 @@ export default function KnowledgeCheck({ chatbotId }: KnowledgeCheckProps) {
   useEffect(() => {
     const checkKnowledge = async () => {
       try {
-        const res = await fetch(apiUrl(`/api/chatbot/${chatbotId}/sources`));
-        const data = await res.json();
+        const response = await apiClient.get(`/api/chatbot/${chatbotId}/sources`);
+        const data = (response as { data: any }).data;
 
         console.log('data: ', data);
         if (data && data?.success && data?.responseObject) {

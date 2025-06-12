@@ -17,10 +17,16 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
       }
     };
     checkSession();
-    // Optionally, listen for session changes:
+    
+    // Listen for session changes
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) router.replace("/signin");
+      if (!session) {
+        router.replace("/signin");
+      } else {
+        setLoading(false);
+      }
     });
+    
     return () => {
       listener?.subscription.unsubscribe();
     };
@@ -29,5 +35,6 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   if (loading) {
     return <div className="w-full h-screen flex items-center justify-center">Loading...</div>;
   }
+  
   return <>{children}</>;
 }

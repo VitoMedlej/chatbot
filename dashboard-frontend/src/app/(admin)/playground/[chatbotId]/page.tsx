@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import KnowledgeCheck from "@/components/KnowledgeCheck";
-import { apiUrl } from "@/lib/server";
+import { apiClient } from "@/lib/apiClient";
 
 export default function ChatbotPlaygroundPage() {
   const router = useRouter();
@@ -29,39 +29,33 @@ export default function ChatbotPlaygroundPage() {
       const { data } = await supabase.auth.getUser();
       setUserId(data?.user?.id ?? null);
     })();
-  }, []);
-
-  // Fetch chatbot info (persona/instructions)
+  }, []);  // Fetch chatbot info (persona/instructions)
   useEffect(() => {
     if (!chatbotId) return;
     (async () => {
       try {
-        const res = await fetch(apiUrl(`/api/chatbot/${chatbotId}`));
-        const data = await res.json();
-        if (data?.success && data?.data) setChatbot(data.data);
+        const res = await apiClient.get<any>(`/api/chatbot/${chatbotId}`);
+        if (res?.success && res?.data) setChatbot(res.data);
         else setError("Failed to load chatbot info.");
       } catch {
         setError("Failed to load chatbot info.");
       }
     })();
-  }, [chatbotId]);
-
-  // Fetch context chunks for display
+  }, [chatbotId]);  // Fetch context chunks for display
   useEffect(() => {
     if (!chatbotId) return;
     setContextLoading(true);
     (async () => {
       try {
-        const res = await fetch(apiUrl(`/api/chatbot/${chatbotId}/sources`));
-        const data = await res.json();
-        setContextChunks(data?.responseObject || []);
+        const res = await apiClient.get<any>(`/api/chatbot/${chatbotId}/sources`);
+        setContextChunks(res?.responseObject || []);
+      } catch (error) {
+        console.error("Failed to load context chunks:", error);
       } finally {
         setContextLoading(false);
       }
     })();
-  }, [chatbotId]);
-
-  const sendMessage = async (e?: React.FormEvent) => {
+  }, [chatbotId]);  const sendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!input.trim() || loading || !userId) return;
     setError(null);
@@ -70,27 +64,22 @@ export default function ChatbotPlaygroundPage() {
     setInput("");
     setLoading(true);
     try {
-      const res = await fetch(apiUrl("/api/chatbot/chat-context"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId,
-          chatbotId,
-          message: userMessage.content,
-        }),
+      const res = await apiClient.post<any>("/api/chatbot/chat-context", {
+        userId,
+        chatbotId,
+        message: userMessage.content,
       });
-      const data = await res.json();
       let assistantReply = null;
-      if (data?.success) {
+      if (res?.success) {
         // Support both possible response shapes
-        if (typeof data.responseObject === "string") {
-          assistantReply = data.responseObject;
-        } else if (typeof data.data === "string") {
-          assistantReply = data.data;
+        if (typeof res.responseObject === "string") {
+          assistantReply = res.responseObject;
+        } else if (typeof res.data === "string") {
+          assistantReply = res.data;
         }
       }
-      if (!res.ok || !data?.success || !assistantReply) {
-        setError(data?.message || "Failed to get answer.");
+      if (!res?.success || !assistantReply) {
+        setError(res?.message || "Failed to get answer.");
         setLoading(false);
         return;
       }

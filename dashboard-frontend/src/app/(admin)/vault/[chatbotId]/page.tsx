@@ -7,6 +7,7 @@ import Button from "@/components/ui/button/Button";
 import Input from "@/components/form/input/InputField";
 import Label from "@/components/form/Label";
 import { supabase } from "@/lib/supabase";
+import { apiClient } from "@/lib/apiClient";
 import { apiUrl } from "@/lib/server";
 
 const PERSONALITIES = [
@@ -34,6 +35,7 @@ export default function KnowledgeVaultPage() {
   const chatbotId = params?.chatbotId as string;
   const [chatbot, setChatbot] = useState<any>(null);
   const [sources, setSources] = useState<Source[]>([]);
+  console.log('sources: ', sources);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,179 +59,148 @@ export default function KnowledgeVaultPage() {
   const [avatarUrl, setAvatarUrl] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [personality, setPersonality] = useState("friendly");
-  const [saveLoading, setSaveLoading] = useState(false);
-
-  // Fetch chatbot info and sources
+  const [saveLoading, setSaveLoading] = useState(false);  // Fetch chatbot info and sources
   const fetchAll = async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(apiUrl(`/api/chatbot/${chatbotId}`));
-      const result = await res.json();
-      if (result?.responseObject) {
-        setChatbot(result.responseObject);
-        setName(result.responseObject.name || "");
-        setAvatarUrl(result.responseObject.avatar_url || "");
-        setLogoUrl(result.responseObject.logo_url || "");
-        setPersonality(result.responseObject.personality || "friendly");
+      const res = await apiClient.get<any>(`/api/chatbot/${chatbotId}`);
+      if (res?.responseObject) {
+        setChatbot(res.responseObject);
+        setName(res.responseObject.name || "");
+        setAvatarUrl(res.responseObject.avatar_url || "");
+        setLogoUrl(res.responseObject.logo_url || "");
+        setPersonality(res.responseObject.personality || "friendly");
       }
       // Fetch sources from backend
-      const sourcesRes = await fetch(apiUrl(`/api/chatbot/${chatbotId}/sources`));
-      const sourcesData = await sourcesRes.json();
-      setSources(sourcesData?.responseObject || []);
+      const sourcesRes = await apiClient.get<any>(`/api/chatbot/${chatbotId}/sources`);
+      setSources(sourcesRes?.responseObject || []);
     } catch (err: any) {
       setError("Failed to load chatbot info.");
     }
     setLoading(false);
   };
-
   useEffect(() => {
-    if (chatbotId) fetchAll();
-  }, [chatbotId]);
-
-  // Add manual text
+    if (!chatbotId) return;
+    fetchAll();
+  }, [chatbotId]);  // Add manual text
   const handleManualIngest = async (e: React.FormEvent) => {
     e.preventDefault();
     setManualLoading(true);
     setError(null);
-    // Call backend API, not Supabase directly
-    const res = await fetch(apiUrl("/api/chatbot/manual-ingest"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    try {
+      // Call backend API, not Supabase directly
+      const res = await apiClient.post<any>("/api/chatbot/manual-ingest", {
         chatbotId,
         userId: chatbot?.user_id, // Pass userId if available
         title: manualTitle,
         description: manualDesc,
         content: manualText,
-      }),
-    });
-    const result = await res.json();
-    setManualLoading(false);
-    if (!res.ok) {
-      setError(result?.message || "Failed to ingest text");
-      return;
+      });
+      setManualLoading(false);
+      setManualText("");
+      setManualTitle("");
+      setManualDesc("");
+      // Refresh sources from backend API (not direct DB)
+      fetchAll();
+    } catch (err: any) {
+      setManualLoading(false);
+      setError(err.response?.data?.message || "Failed to ingest text");
     }
-    setManualText("");
-    setManualTitle("");
-    setManualDesc("");
-    // Refresh sources from backend API (not direct DB)
-    fetchAll();
   };
-
   // Add URL (extract and ingest)
   const handleUrlIngest = async (e: React.FormEvent) => {
     e.preventDefault();
     setUrlLoading(true);
     setError(null);
 
-    // Ensure chatbot and chatbot.user_id are available
     if (!chatbot || !chatbot.user_id) {
       setError("Chatbot user ID is not available. Please reload the page.");
       setUrlLoading(false);
       return;
     }
 
-    const res = await fetch(apiUrl("/api/chatbot/website/extract-website"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    try {
+      const res = await apiClient.post("/api/chatbot/website/extract-website", {
         url: urlInput,
         chatbotId,
-        userId: chatbot.user_id, // Add userId to the request body
-      }),
-    });
-    const result = await res.json();
-    setUrlLoading(false);
-    if (!res.ok) {
-      setError(result.message || "Failed to ingest URL.");
-      return;
+        userId: chatbot.user_id,
+      });
+      setUrlLoading(false);
+      setUrlInput("");
+      fetchAll();
+    } catch (err: any) {
+      setUrlLoading(false);
+      setError("Failed to ingest URL.");
     }
-    setUrlInput("");
-    // Refresh sources
-    const { data: srcs } = await supabase
-      .from("chatbot_knowledge")
-      .select("*")
-      .eq("chatbot_id", chatbotId)
-      .order("created_at", { ascending: false });
-    setSources(srcs || []);
-  };
-
-  // File upload (PDF/CSV) - TODO: implement backend endpoint
+  };  // File upload (PDF/CSV) - TODO: implement backend endpoint
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setFileLoading(true);
     setError(null);
-
     try {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("chatbotId", chatbotId);
-
+      
+      // Get token from Supabase session for auth header
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      
       const res = await fetch(apiUrl("/api/chatbot/website/upload-file"), {
         method: "POST",
         body: formData,
+        headers: token ? {
+          'Authorization': `Bearer ${token}`
+        } : {}
       });
-
-      const result = await res.json();
+      await res.json();
       setFileLoading(false);
-
       if (!res.ok) {
-        setError(result.message || "Failed to upload file.");
+        setError("Failed to upload file.");
         return;
       }
-
-      // Refresh sources
-      const { data: srcs } = await supabase
-        .from("chatbot_knowledge")
-        .select("*")
-        .eq("chatbot_id", chatbotId)
-        .order("created_at", { ascending: false });
-      setSources(srcs || []);
+      fetchAll();
     } catch (err) {
       setFileLoading(false);
       setError("An error occurred while uploading the file.");
     }
-  };
-
-  // Delete source
+  };  // Delete source
   const handleDeleteSource = async (id: number) => {
     setLoading(true);
     setError(null);
-    await supabase.from("chatbot_knowledge").delete().eq("id", id);
-    const { data: srcs } = await supabase
-      .from("chatbot_knowledge")
-      .select("*")
-      .eq("chatbot_id", chatbotId)
-      .order("created_at", { ascending: false });
-    setSources(srcs || []);
-    setLoading(false);
-  };
-
-  // Save chatbot customization
+    try {
+      const res = await apiClient.deleteWithBody<any>("/api/chatbot/knowledge/chunks", {
+        chatbotId,
+        chunkIds: [id]
+      });
+      fetchAll();
+      setLoading(false);
+    } catch (err: any) {
+      setLoading(false);
+      setError("Failed to delete source.");
+    }
+  };  // Save chatbot customization
   const handleSaveCustomization = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaveLoading(true);
     setError(null);
-    const res = await fetch(apiUrl("/api/chatbot/update"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    try {
+      const res = await apiClient.post<any>("/api/chatbot/update", {
         id: chatbotId,
         name,
         avatar_url: avatarUrl,
         logo_url: logoUrl,
         personality,
-      }),
-    });
-    setSaveLoading(false);
-    if (!res.ok) {
+      });
+      setSaveLoading(false);
+      setEditMode(false);
+      fetchAll();
+    } catch (err: any) {
+      setSaveLoading(false);
       setError("Failed to update chatbot customization.");
-      return;
     }
-    setEditMode(false);
-    fetchAll();
   };
 
   return (
@@ -366,7 +337,13 @@ export default function KnowledgeVaultPage() {
             <li key={src.id} className="flex flex-col gap-1 mb-2 border-b pb-2">
               <div className="flex items-center justify-between">
                 <span className="font-semibold">
-                  {src.title || src.source_name || src.source_type}
+                  {src.source_type === "website" && src.source_name ? (
+                    <a href={src.source_name} target="_blank" rel="noopener noreferrer" className="underline text-blue-700">
+                      {src.title || src.source_name}
+                    </a>
+                  ) : (
+                    src.title || src.source_name || src.source_type
+                  )}
                 </span>
                 <Button
                   variant="outline"
@@ -379,6 +356,12 @@ export default function KnowledgeVaultPage() {
               {src.description && (
                 <div className="text-xs text-gray-500">{src.description}</div>
               )}
+              {src.content && (
+                <div className="text-xs text-gray-700 whitespace-pre-line mt-1 max-h-32 overflow-y-auto border rounded p-2 bg-gray-50">
+                  {src.content}
+                </div>
+              )}
+
             </li>
           ))}
         </ul>
