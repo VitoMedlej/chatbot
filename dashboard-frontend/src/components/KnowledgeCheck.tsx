@@ -14,37 +14,38 @@ export default function KnowledgeCheck({ chatbotId }: KnowledgeCheckProps) {
   const router = useRouter();
 
   useEffect(() => {
+    let isMounted = true;
     const checkKnowledge = async () => {
       try {
-        const response = await apiClient.get(`/api/chatbot/${chatbotId}/sources`);
-        const data = (response as { data: any }).data;
-
-        console.log('data: ', data);
-        if (data && data?.success && data?.responseObject) {
-          setHasKnowledge(true);
-        } else {
-          setHasKnowledge(false);
-          router.replace(`/vault/${chatbotId}`); // Redirect to add information source
+        const response = await apiClient.get<any>(`/api/chatbot/${chatbotId}/sources`);
+        let sources: any[] = [];
+        if (response && Array.isArray(response.responseObject)) {
+          sources = response.responseObject;
+        } else if (response && response.data && Array.isArray(response.data.responseObject)) {
+          sources = response.data.responseObject;
+        } else if (Array.isArray(response)) {
+          sources = response;
         }
-      } catch (error) {
-        console.error("Error checking knowledge sources:", error);
-        setHasKnowledge(false);
-        router.replace(`/vault/${chatbotId}`);
-      } finally {
-        setLoading(false);
+        if (isMounted) {
+          setHasKnowledge(Array.isArray(sources) && sources.length > 0);
+          setLoading(false);
+          if (!Array.isArray(sources) || sources.length === 0) {
+            router.replace(`/vault/${chatbotId}`);
+          }
+        }
+      } catch {
+        if (isMounted) {
+          setHasKnowledge(false);
+          setLoading(false);
+          router.replace(`/vault/${chatbotId}`);
+        }
       }
     };
-
     checkKnowledge();
+    return () => { isMounted = false; };
   }, [chatbotId, router]);
 
-  if (loading) {
-    return <div>Loading...</div>;
-  }
-
-  if (!hasKnowledge) {
-    return null; // Redirecting, so no need to render anything
-  }
-
-  return <></>; // Render nothing if knowledge exists
+  if (loading) return <div>Loading...</div>;
+  if (!hasKnowledge) return null;
+  return null;
 }

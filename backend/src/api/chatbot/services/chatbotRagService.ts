@@ -16,7 +16,7 @@ async function retrieveAndAnswer(req: Request): Promise<ServiceResponse<null | {
         // Fetch chatbot persona/instructions and homepage_url
         const { data: chatbotInfo } = await supabase
             .from("chatbots")
-            .select("business_name,persona,instructions,homepage_url")
+            .select("business_name,persona,instructions,homepage_url,personality")
             .eq("id", chatbotId)
             .single();
 
@@ -58,7 +58,6 @@ async function retrieveAndAnswer(req: Request): Promise<ServiceResponse<null | {
             );
         }
         const filteredChunks = (chunks ?? []).filter((c: any) => {
-            // Filter out if the chunk is homepage-only or generic
             if (isHomepage(c.source_url)) return false;
             if (isGenericContent(c.content)) return false;
             return true;
@@ -78,12 +77,31 @@ async function retrieveAndAnswer(req: Request): Promise<ServiceResponse<null | {
             .slice(0, 8000);
 
         // 3. Ask gpt-4o-mini with context and persona
-        const systemPrompt =
-            (chatbotInfo?.instructions ||
-                `You are the official chatbot for ${chatbotInfo?.business_name || "this business"}.
-Be concise and helpful. Only be detailed if the user asks for details.
-Never say you are ChatGPT. Always answer as a representative of ${chatbotInfo?.business_name || "this business"}.
-Do NOT suggest the homepage or a generic link unless the user specifically asks for it or it is directly relevant to their question. If you do not have a relevant link, answer based on the provided context or ask for clarification.`);
+        let systemPrompt =
+            (chatbotInfo?.instructions || chatbotInfo?.persona ||
+                `You are the official chatbot for ${chatbotInfo?.business_name || "this business"}. Be concise unless asked for details. Never say you are ChatGPT. Always answer as a representative of ${chatbotInfo?.business_name || "this business"}.`);
+        if (chatbotInfo?.personality) {
+            switch (chatbotInfo.personality) {
+                case "professional":
+                    systemPrompt = `Respond formally and with expertise. ${systemPrompt}`;
+                    break;
+                case "enthusiastic":
+                    systemPrompt = `Respond with energy and positivity. ${systemPrompt}`;
+                    break;
+                case "concise":
+                    systemPrompt = `Keep answers brief and to the point. ${systemPrompt}`;
+                    break;
+                case "empathetic":
+                    systemPrompt = `Respond with care and understanding. ${systemPrompt}`;
+                    break;
+                case "friendly":
+                default:
+                    systemPrompt = `Respond in a friendly, approachable way. ${systemPrompt}`;
+                    break;
+            }
+        }
+        // ENFORCE: Never suggest homepage or generic links unless user asks for homepage
+        systemPrompt += `\nNever suggest the homepage or a generic link unless the user specifically asks for it or it is directly relevant to their question. If you do not have a relevant link, answer based on the provided context or ask for clarification. Never say you are an AI or ChatGPT. Always answer as a representative of the business.`;
 
         const completion = await openai.chat.completions.create({
             model: GPT_MODEL,
