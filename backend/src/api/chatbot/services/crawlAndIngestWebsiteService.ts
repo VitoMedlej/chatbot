@@ -117,7 +117,7 @@ export async function crawlAndIngestWebsiteJob(job: {
                     chunkEmbeddings = await Promise.all(
                         chunks.map(async (chunk) => {
                             const embeddingResponse = await openai.embeddings.create({
-                                model: "text-embedding-ada-002",
+                                model: "text-embedding-3-small",
                                 input: chunk,
                             });
                             return embeddingResponse.data[0].embedding;

@@ -12,13 +12,13 @@ export async function directQuestionAnswer(req: Request): Promise<ServiceRespons
     }
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini", 
+      model: "gpt-3.5-turbo", 
       messages: [
         { role: "system", content: "You are a helpful assistant." },
         { role: "user", content: question }
       ],
-      max_tokens: 512,
-      temperature: 0.7,
+      max_tokens: 200,
+      temperature: 0.1,
     });
 
     const answer = completion.choices?.[0]?.message?.content ?? "No answer generated.";

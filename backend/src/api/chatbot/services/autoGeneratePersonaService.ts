@@ -76,7 +76,7 @@ export async function autoGeneratePersona(req: any): Promise<ServiceResponse<any
     const combined = chunks.map(c => c.content).join("\n\n").slice(0, 1000);
 
     const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "gpt-3.5-turbo",
         messages: [
             {
                 role: "system",
@@ -97,8 +97,8 @@ Respond in JSON:
 `
             }
         ],
-        temperature: 0.2,
-        max_tokens: 300
+        temperature: 0.1,
+        max_tokens: 150
     });
 
     const text = completion.choices[0].message.content;

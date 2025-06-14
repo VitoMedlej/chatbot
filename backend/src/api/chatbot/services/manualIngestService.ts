@@ -45,20 +45,16 @@ export async function ingestManualText(req: any): Promise<ServiceResponse<any>> 
         }
 
         // Chunk the content
-        const chunks = chunkText(content);
-
-        // Generate embeddings for each chunk
+        const chunks = chunkText(content);        // Generate embeddings sequentially to avoid rate limits
         let embeddings: any[] = [];
         try {
-            embeddings = await Promise.all(
-                chunks.map(async (chunk) => {
-                    const embeddingResponse = await openai.embeddings.create({
-                        model: "text-embedding-3-small",
-                        input: chunk,
-                    });
-                    return embeddingResponse.data[0].embedding;
-                })
-            );
+            for (const chunk of chunks) {
+                const embeddingResponse = await openai.embeddings.create({
+                    model: "text-embedding-3-small",
+                    input: chunk,
+                });
+                embeddings.push(embeddingResponse.data[0].embedding);
+            }
         } catch (embedErr: any) {
             // Rollback: delete the just-inserted chatbot_knowledge row
             if (inserted && inserted[0] && inserted[0].id) {

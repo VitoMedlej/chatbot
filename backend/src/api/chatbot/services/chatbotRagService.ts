@@ -3,8 +3,8 @@ import { ServiceResponse } from "@/common/models/serviceResponse";
 import { StatusCodes } from "http-status-codes";
 import { openai, supabase } from "@/server";
 
-const GPT_MODEL = "gpt-4o-mini";
-const TOP_K = 8;
+const GPT_MODEL = "gpt-3.5-turbo";
+const TOP_K = 5;
 
 async function retrieveAndAnswer(req: Request): Promise<ServiceResponse<null | { answer: string }>> {
     try {
@@ -109,8 +109,8 @@ async function retrieveAndAnswer(req: Request): Promise<ServiceResponse<null | {
                 { role: "system", content: systemPrompt },
                 { role: "user", content: `Context:\n${context}\n\nQuestion: ${question}` }
             ],
-            max_tokens: 512,
-            temperature: 0.2,
+            max_tokens: 200,
+            temperature: 0.1,
         });
 
         const answer = completion.choices?.[0]?.message?.content ?? "No answer generated.";
