@@ -20,7 +20,7 @@ export default function SignUpForm() {
   const router = useRouter();
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      if (data.user) router.replace("/dashboard");
+      if (data.user) router.replace("/");
     });
   }, [router]);
 

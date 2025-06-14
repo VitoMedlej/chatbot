@@ -63,19 +63,15 @@ export default function ChatbotPlaygroundPage() {
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setLoading(true);
-    try {
-      const res = await apiClient.post<any>("/api/chatbot/chat-context", {
-        userId,
+    try {      const res = await apiClient.post<any>("/api/chatbot/rag-qa", {
         chatbotId,
-        message: userMessage.content,
-      });
-      let assistantReply = null;
+        question: userMessage.content,
+        userId: userId,
+      });let assistantReply = null;
       if (res?.success) {
-        // Support both possible response shapes
-        if (typeof res.responseObject === "string") {
-          assistantReply = res.responseObject;
-        } else if (typeof res.data === "string") {
-          assistantReply = res.data;
+        // RAG service returns { answer: string } in responseObject
+        if (res.responseObject?.answer) {
+          assistantReply = res.responseObject.answer;
         }
       }
       if (!res?.success || !assistantReply) {

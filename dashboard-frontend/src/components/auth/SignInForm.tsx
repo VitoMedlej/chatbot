@@ -22,7 +22,7 @@ export default function SignInForm() {
     const checkUser = async () => {
       const { data } = await supabase.auth.getUser();
       if (data.user) {
-        router.replace("/dashboard");
+        router.replace("/");
       }
     };
     checkUser();
@@ -42,7 +42,7 @@ export default function SignInForm() {
       if (error) {
         setError(error.message);
       } else {
-        router.replace("/dashboard");
+        router.replace("/");
       }
     } catch (error: any) {
       setError(error.message || "Login failed");
@@ -59,7 +59,7 @@ export default function SignInForm() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/dashboard`
+          redirectTo: `${window.location.origin}/`
         }
       });
 

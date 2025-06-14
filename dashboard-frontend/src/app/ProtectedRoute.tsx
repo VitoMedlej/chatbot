@@ -5,25 +5,47 @@ import { supabase } from "@/lib/supabase";
 
 export default function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
     const checkSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) {
-        router.replace("/signin");
-      } else {
+      try {
+        // First, handle any auth tokens in the URL (for redirects after login)
+        const { data, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error("Auth error:", error);
+          router.replace("/login");
+          return;
+        }
+
+        if (data.session) {
+          setIsAuthenticated(true);
+        } else {
+          router.replace("/login");
+        }
+      } catch (error) {
+        console.error("Session check error:", error);
+        router.replace("/login");
+      } finally {
         setLoading(false);
       }
     };
+
     checkSession();
     
     // Listen for session changes
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) {
-        router.replace("/signin");
-      } else {
+    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        setIsAuthenticated(true);
         setLoading(false);
+      } else if (event === 'SIGNED_OUT') {
+        setIsAuthenticated(false);
+        router.replace("/login");
+      } else if (!session) {
+        setIsAuthenticated(false);
+        router.replace("/login");
       }
     });
     
@@ -33,7 +55,18 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   }, [router]);
 
   if (loading) {
-    return <div className="w-full h-screen flex items-center justify-center">Loading...</div>;
+    return (
+      <div className="w-full h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return null; // Will redirect to login
   }
   
   return <>{children}</>;

@@ -15,9 +15,7 @@ export default function LoginPage() {
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setLoading(true);
-
-    const { error } = await supabase.auth.signInWithPassword({
+    setLoading(true);    const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -27,7 +25,7 @@ export default function LoginPage() {
       console.error('Login error:', error);
     } else {
       console.log('Login successful');
-      router.push('/dashboard'); // Redirect to dashboard
+      router.push('/'); // Redirect to admin dashboard (root)
     }
     setLoading(false);
   };
