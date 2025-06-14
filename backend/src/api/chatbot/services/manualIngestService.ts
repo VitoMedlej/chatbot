@@ -4,13 +4,17 @@ import { openai, supabase } from "@/server";
 import { chunkText } from "@/utils/chunkText";
 
 export async function ingestManualText(req: any): Promise<ServiceResponse<any>> {
+    const startTime = Date.now();
+    let timings: { [key: string]: number } = {};
+    
     try {
         const { chatbotId, userId, title, description, content } = req.body;
         if (!chatbotId || !content || !userId) {
             return ServiceResponse.failure("Missing chatbotId, userId, or content.", null, StatusCodes.BAD_REQUEST);
         }
 
-        // Deduplicate: check if content already exists for this chatbot and title/description/content
+        // Performance tracking: Duplicate check
+        const duplicateCheckStart = Date.now();
         const { data: existing, error: existingError } = await supabase
             .from("chatbot_knowledge")
             .select("id")
@@ -18,6 +22,8 @@ export async function ingestManualText(req: any): Promise<ServiceResponse<any>> 
             .eq("title", title)
             .eq("description", description)
             .eq("content", content);
+        timings.duplicateCheck = Date.now() - duplicateCheckStart;
+        
         if (existingError) {
             return ServiceResponse.failure("Failed to check for duplicates.", null, StatusCodes.INTERNAL_SERVER_ERROR);
         }
@@ -25,7 +31,8 @@ export async function ingestManualText(req: any): Promise<ServiceResponse<any>> 
             return ServiceResponse.success("Duplicate content detected. Skipping ingestion.", null);
         }
 
-        // Insert into chatbot_knowledge first
+        // Performance tracking: Knowledge base insertion
+        const knowledgeInsertStart = Date.now();
         const { data: inserted, error: knowledgeError } = await supabase.from("chatbot_knowledge").insert([
             {
                 chatbot_id: chatbotId,
@@ -40,12 +47,17 @@ export async function ingestManualText(req: any): Promise<ServiceResponse<any>> 
                 metadata: null
             }
         ]).select();
+        timings.knowledgeInsert = Date.now() - knowledgeInsertStart;
+        
         if (knowledgeError) {
             return ServiceResponse.failure("Failed to save knowledge.", null, StatusCodes.INTERNAL_SERVER_ERROR);
         }
 
-        // Chunk the content
-        const chunks = chunkText(content);        // Generate embeddings sequentially to avoid rate limits
+        // Performance tracking: Text chunking
+        const chunkingStart = Date.now();
+        const chunks = chunkText(content);
+        timings.chunking = Date.now() - chunkingStart;        // Performance tracking: Embedding generation (sequential to avoid rate limits)
+        const embeddingStart = Date.now();
         let embeddings: any[] = [];
         try {
             for (const chunk of chunks) {
@@ -62,8 +74,10 @@ export async function ingestManualText(req: any): Promise<ServiceResponse<any>> 
             }
             return ServiceResponse.failure("Failed to generate embeddings. Rolled back knowledge base entry.", null, StatusCodes.INTERNAL_SERVER_ERROR);
         }
+        timings.embeddings = Date.now() - embeddingStart;
 
-        // Insert chunks into document_chunks table
+        // Performance tracking: Chunk storage
+        const chunkStorageStart = Date.now();
         const { error } = await supabase.from("document_chunks").insert(
             chunks.map((chunk, index) => ({
                 chatbot_id: chatbotId,
@@ -74,8 +88,7 @@ export async function ingestManualText(req: any): Promise<ServiceResponse<any>> 
                 description,
             }))
         );
-
-        if (error) {
+        timings.chunkStorage = Date.now() - chunkStorageStart;        if (error) {
             // Rollback: delete the just-inserted chatbot_knowledge row
             if (inserted && inserted[0] && inserted[0].id) {
                 await supabase.from("chatbot_knowledge").delete().eq("id", inserted[0].id);
@@ -83,9 +96,32 @@ export async function ingestManualText(req: any): Promise<ServiceResponse<any>> 
             return ServiceResponse.failure("Failed to save chunks. Rolled back knowledge base entry.", null, StatusCodes.INTERNAL_SERVER_ERROR);
         }
 
+        // Calculate total time and log performance metrics
+        const totalTime = Date.now() - startTime;
+        timings.total = totalTime;
+        
+        console.log(`[PERFORMANCE] Manual text ingestion completed in ${totalTime}ms:`, {
+            duplicateCheck: `${timings.duplicateCheck}ms`,
+            knowledgeInsert: `${timings.knowledgeInsert}ms`,
+            chunking: `${timings.chunking}ms`,
+            embeddings: `${timings.embeddings}ms`,
+            chunkStorage: `${timings.chunkStorage}ms`,
+            chatbotId,
+            contentLength: content.length,
+            chunksGenerated: chunks.length,
+            embeddingsGenerated: embeddings.length
+        });
+
         // Do NOT update setup_complete here (manual ingest)
         return ServiceResponse.success("Manual text ingested successfully.", null);
     } catch (err: any) {
+        const totalTime = Date.now() - startTime;
+        console.error(`[PERFORMANCE ERROR] Manual text ingestion failed after ${totalTime}ms:`, {
+            error: err.message,
+            timings,
+            chatbotId: req.body?.chatbotId,
+            contentLength: req.body?.content?.length || 0
+        });
         return ServiceResponse.failure("Failed to ingest manual text.", null, StatusCodes.INTERNAL_SERVER_ERROR);
     }
 }
