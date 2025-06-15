@@ -77,3 +77,66 @@ export async function deleteChunks(
         return ServiceResponse.failure(err.message, null, StatusCodes.INTERNAL_SERVER_ERROR);
     }
 }
+
+/**
+ * Delete an entire chatbot and all its associated data.
+ * This is a destructive operation that cannot be undone.
+ */
+export async function deleteChatbot(chatbotId: string): Promise<ServiceResponse<any>> {
+    // Validate chatbotId
+    if (!chatbotId || typeof chatbotId !== 'string' || chatbotId.trim() === '') {
+        return ServiceResponse.failure("Invalid or missing chatbotId", null, StatusCodes.BAD_REQUEST);
+    }
+
+    try {
+        // Start a transaction-like sequence
+        // 1. Delete all chatbot knowledge/chunks
+        const { error: knowledgeError } = await supabase
+            .from("chatbot_knowledge")
+            .delete()
+            .eq("chatbot_id", chatbotId);
+
+        if (knowledgeError) {
+            console.error("Error deleting chatbot knowledge:", knowledgeError);
+            return ServiceResponse.failure("Failed to delete chatbot knowledge", null, StatusCodes.INTERNAL_SERVER_ERROR);
+        }
+
+        // 2. Delete chatbot personas
+        const { error: personaError } = await supabase
+            .from("chatbot_personas")
+            .delete()
+            .eq("chatbot_id", chatbotId);
+
+        if (personaError) {
+            console.error("Error deleting chatbot personas:", personaError);
+            return ServiceResponse.failure("Failed to delete chatbot personas", null, StatusCodes.INTERNAL_SERVER_ERROR);
+        }
+
+        // 3. Delete document chunks (if using different table)
+        const { error: chunksError } = await supabase
+            .from("document_chunks")
+            .delete()
+            .eq("chatbot_id", chatbotId);
+
+        if (chunksError) {
+            console.error("Error deleting document chunks:", chunksError);
+            return ServiceResponse.failure("Failed to delete document chunks", null, StatusCodes.INTERNAL_SERVER_ERROR);
+        }
+
+        // 4. Delete the chatbot itself
+        const { error: chatbotError } = await supabase
+            .from("chatbots")
+            .delete()
+            .eq("id", chatbotId);
+
+        if (chatbotError) {
+            console.error("Error deleting chatbot:", chatbotError);
+            return ServiceResponse.failure("Failed to delete chatbot", null, StatusCodes.INTERNAL_SERVER_ERROR);
+        }
+
+        return ServiceResponse.success("Chatbot and all associated data successfully deleted", { chatbotId });
+    } catch (error) {
+        console.error("Error deleting chatbot:", error);
+        return ServiceResponse.failure("Failed to delete chatbot", null, StatusCodes.INTERNAL_SERVER_ERROR);
+    }
+}

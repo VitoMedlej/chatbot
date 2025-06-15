@@ -6,6 +6,7 @@ import { fileRouter } from "./fileRouter";
 import { knowledgeRouter } from "./knowledgeRouter";
 import { websiteRouter } from "./websiteRouter";
 import { validateChatbotOwnership } from "../../common/middleware/authorizationHandler";
+import { validateFileUpload } from "../../common/middleware/inputValidation";
 
 export const chatbotRouter = express.Router();
 
@@ -26,6 +27,17 @@ chatbotRouter.get("/:chatbotId/sources/all", validateChatbotOwnership, chatbotCo
 chatbotRouter.get("/:chatbotId", validateChatbotOwnership, chatbotController.getChatbotByIdHandler);
 chatbotRouter.post("/manual-ingest", validateChatbotOwnership, chatbotController.manualIngestHandler);
 chatbotRouter.post("/update", validateChatbotOwnership, chatbotController.updateChatbotHandler);
+chatbotRouter.delete("/:chatbotId", validateChatbotOwnership, chatbotController.deleteChatbotHandler);
+
+// File upload route
+const upload = multer({ dest: "uploads/" });
+chatbotRouter.post("/upload-file", validateChatbotOwnership, upload.single("file"), validateFileUpload, chatbotController.uploadFileHandler);
+
+// Manual links ingestion route
+chatbotRouter.post("/ingest-manual-links", validateChatbotOwnership, chatbotController.ingestManualLinksHandler);
+
+// Persona management routes
+chatbotRouter.post("/upsert-default-persona", validateChatbotOwnership, chatbotController.upsertDefaultPersonaHandler);
 
 // Sub-routers with ownership validation
 chatbotRouter.use("/persona", validateChatbotOwnership, personaRouter);

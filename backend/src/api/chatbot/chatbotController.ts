@@ -3,7 +3,7 @@ import { RequestHandler } from "express";
 import { chatbotService } from "./chatbotService";
 import { chatbotIngestService } from "./services/chatbotIngestService";
 import { chatbotRagService } from "./services/chatbotRagService";
-import { deleteChunks } from "./services/chatbotDeleteService";
+import { deleteChunks, deleteChatbot } from "./services/chatbotDeleteService";
 import { listChunks } from "./services/chatbotListService"; // Import the new service
 import { chatWithContext } from "./services/chatbotContextService";
 import { extractWebsiteInfo } from "./services/websiteExtractService";
@@ -137,6 +137,12 @@ class ChatbotController {
 
     updateChatbotHandler: RequestHandler = async (req, res) => {
         const serviceResponse = await updateChatbotService(req);
+        return handleServiceResponse(serviceResponse, res);
+    };
+
+    deleteChatbotHandler: RequestHandler = async (req, res) => {
+        const chatbotId = req.params.chatbotId || req.body.chatbotId;
+        const serviceResponse = await deleteChatbot(chatbotId);
         return handleServiceResponse(serviceResponse, res);
     };
 }

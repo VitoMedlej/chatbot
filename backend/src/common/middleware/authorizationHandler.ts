@@ -2,26 +2,79 @@ import { RequestHandler } from "express";
 import { ServiceResponse } from "../models/serviceResponse";
 import { StatusCodes } from "http-status-codes";
 import { handleServiceResponse } from "../utils/httpHandlers";
+import { supabase } from "@/server";
 
 // Middleware to check if user owns the resource (chatbot)
 export const validateChatbotOwnership: RequestHandler = async (req, res, next) => {
     const userId = req.user?.id;
-    const chatbotId = req.params.chatbotId || req.body.chatbotId;
+    const chatbotId = req.params.chatbotId || req.body.chatbotId || req.query.chatbotId;
     
-    if (!userId) {
+    // Strict user ID validation
+    if (!userId || typeof userId !== 'string' || userId.trim() === '') {
+        console.warn("Authorization failed: Missing or invalid user ID from token");
         const serviceResponse = ServiceResponse.failure("User ID missing from token", null, StatusCodes.UNAUTHORIZED);
         return handleServiceResponse(serviceResponse, res);
     }
     
-    if (!chatbotId) {
+    // Strict chatbot ID validation
+    if (!chatbotId || typeof chatbotId !== 'string' || chatbotId.trim() === '') {
+        console.warn("Authorization failed: Missing or invalid chatbot ID");
         const serviceResponse = ServiceResponse.failure("Chatbot ID missing", null, StatusCodes.BAD_REQUEST);
         return handleServiceResponse(serviceResponse, res);
     }
-    
-    // TODO: Add database check to verify user owns this chatbot
-    // For now, we'll add the validation logic and implement the DB check later
-    
-    next();
+
+    // Prevent SQL injection and malformed IDs
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(chatbotId.trim())) {
+        console.warn("Authorization failed: Invalid chatbot ID format");
+        const serviceResponse = ServiceResponse.failure("Invalid chatbot ID format", null, StatusCodes.BAD_REQUEST);
+        return handleServiceResponse(serviceResponse, res);
+    }
+
+    try {
+        // Verify user owns this chatbot with explicit security checks
+        const { data: chatbot, error } = await supabase
+            .from("chatbots")
+            .select("user_id, id")
+            .eq("id", chatbotId.trim())
+            .single();
+
+        if (error) {
+            console.warn("Database error during ownership validation:", error);
+            const serviceResponse = ServiceResponse.failure("Database error during authorization", null, StatusCodes.INTERNAL_SERVER_ERROR);
+            return handleServiceResponse(serviceResponse, res);
+        }
+
+        if (!chatbot) {
+            console.warn(`Authorization failed: Chatbot ${chatbotId} not found`);
+            const serviceResponse = ServiceResponse.failure("Chatbot not found", null, StatusCodes.NOT_FOUND);
+            return handleServiceResponse(serviceResponse, res);
+        }
+
+        // Triple-check ownership with strict validation
+        if (!chatbot.user_id || chatbot.user_id !== userId.trim()) {
+            console.warn(`Authorization failed: User ${userId} attempted access to chatbot ${chatbotId} owned by ${chatbot.user_id}`);
+            const serviceResponse = ServiceResponse.failure("Access denied - chatbot not owned by user", null, StatusCodes.FORBIDDEN);
+            return handleServiceResponse(serviceResponse, res);
+        }
+
+        // Additional security: Verify the chatbot ID matches exactly
+        if (chatbot.id !== chatbotId.trim()) {
+            console.warn("Authorization failed: Chatbot ID mismatch");
+            const serviceResponse = ServiceResponse.failure("Authorization validation failed", null, StatusCodes.FORBIDDEN);
+            return handleServiceResponse(serviceResponse, res);
+        }
+
+        // All checks passed - add validated IDs to request for downstream use
+        req.validatedChatbotId = chatbot.id;
+        req.validatedUserId = userId.trim();
+        
+        next();
+    } catch (error) {
+        console.error("Critical error validating chatbot ownership:", error);
+        const serviceResponse = ServiceResponse.failure("Authorization validation failed", null, StatusCodes.INTERNAL_SERVER_ERROR);
+        return handleServiceResponse(serviceResponse, res);
+    }
 };
 
 // Middleware to check admin role

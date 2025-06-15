@@ -5,16 +5,24 @@ import { productionChatbotEngine } from "./production/chatbotEngine";
 
 async function retrieveAndAnswer(req: Request): Promise<ServiceResponse<null | { answer: string }>> {
     try {
-        const { question, chatbotId } = req.body;
-        if (!question || !chatbotId) {
-            return ServiceResponse.failure("Missing question or chatbotId.", null, StatusCodes.BAD_REQUEST);
+        const { question } = req.body;
+        if (!question || typeof question !== 'string' || question.trim() === '') {
+            return ServiceResponse.failure("Valid question is required.", null, StatusCodes.BAD_REQUEST);
         }
 
-        // Use the production engine
+        // Use validated IDs from authorization middleware for security
+        const chatbotId = req.validatedChatbotId || req.body.chatbotId;
+        const userId = req.validatedUserId || req.body.userId || req.user?.id;
+
+        if (!chatbotId || !userId) {
+            return ServiceResponse.failure("Missing or invalid chatbotId or userId.", null, StatusCodes.BAD_REQUEST);
+        }
+
+        // Use the production engine with validated parameters
         const result = await productionChatbotEngine.processChat({
-            userId: req.body.userId || 'anonymous', 
-            chatbotId: String(chatbotId),
-            message: question
+            userId: userId,
+            chatbotId: chatbotId,
+            message: question.trim()
         });
 
         if (!result.success) {
@@ -23,6 +31,7 @@ async function retrieveAndAnswer(req: Request): Promise<ServiceResponse<null | {
 
         return ServiceResponse.success("Answer generated", { answer: result.responseObject });
     } catch (err: any) {
+        console.error("Error in retrieveAndAnswer:", err);
         return ServiceResponse.failure("Failed to answer question.", null, StatusCodes.INTERNAL_SERVER_ERROR);
     }
 }
