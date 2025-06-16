@@ -6,8 +6,7 @@
   "repository": "edwinhern/express-typescript-2024",
   "license": "MIT",
   "main": "index.ts",
-  "private": true,
-  "scripts": {
+  "private": true,  "scripts": {
     "dev": "tsx watch --clear-screen=false src/index.ts | pino-pretty",
     "build": "npm install --include=dev && tsup",
     "start": "node dist/index.js",
@@ -15,7 +14,10 @@
     "lint": "biome check src/",
     "lint:fix": "biome check src/ --fix",
     "format": "biome format src/",
-    "test": "vitest run"
+    "test": "vitest run",
+    "production:check": "node production-check.js",
+    "production:build": "npm run clean && npm run build",
+    "production:start": "NODE_ENV=production node dist/index.js"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^7.0.0",

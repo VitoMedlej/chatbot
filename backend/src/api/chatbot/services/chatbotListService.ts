@@ -39,10 +39,10 @@ export async function listChunks(chatbotId: number): Promise<ServiceResponse<any
 /**
  * Lists all knowledge sources for a chatbot, grouped by type.
  */
-export async function listKnowledgeSources(chatbotId: string): Promise<ServiceResponse<any>> {
+export async function listKnowledgeSources(chatbotId: number): Promise<ServiceResponse<any>> {
     try {
-        if (!chatbotId) {
-            return ServiceResponse.failure("Missing chatbotId.", null, StatusCodes.BAD_REQUEST);
+        if (!Number.isInteger(chatbotId) || chatbotId <= 0) {
+            return ServiceResponse.failure("Invalid chatbotId.", null, StatusCodes.BAD_REQUEST);
         }
 
         // Query the chatbot_knowledge table

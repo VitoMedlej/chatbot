@@ -32,7 +32,20 @@ ANALYZE chatbots;
 -- ALTER SYSTEM SET max_parallel_workers_per_gather = 4;
 -- ALTER SYSTEM SET max_parallel_workers = 8;
 
--- 8. Vacuum and analyze for better performance
+-- 8. Add embed-specific columns to chatbots table for public embedding
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS api_key TEXT UNIQUE;
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS allowed_domains TEXT[] DEFAULT '{}';
+ALTER TABLE chatbots ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+
+-- 9. Index for API key lookups (for public embed authentication)
+CREATE INDEX IF NOT EXISTS idx_chatbots_api_key 
+ON chatbots (api_key) WHERE api_key IS NOT NULL;
+
+-- 10. Index for active chatbots
+CREATE INDEX IF NOT EXISTS idx_chatbots_active 
+ON chatbots (is_active) WHERE is_active = TRUE;
+
+-- 11. Vacuum and analyze for better performance
 VACUUM ANALYZE chat_history;
 VACUUM ANALYZE document_chunks;
 VACUUM ANALYZE chatbot_knowledge;

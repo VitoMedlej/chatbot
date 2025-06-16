@@ -52,14 +52,20 @@ export default function KnowledgeVaultPage() {
   // File upload state
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [fileLoading, setFileLoading] = useState(false);
-
   // Edit mode for chatbot customization
   const [editMode, setEditMode] = useState(false);
   const [name, setName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
   const [personality, setPersonality] = useState("friendly");
-  const [saveLoading, setSaveLoading] = useState(false);  // Fetch chatbot info and sources
+  const [saveLoading, setSaveLoading] = useState(false);
+
+  // Embed configuration state
+  const [embedMode, setEmbedMode] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [allowedDomains, setAllowedDomains] = useState<string[]>([]);
+  const [newDomain, setNewDomain] = useState("");
+  const [embedLoading, setEmbedLoading] = useState(false);// Fetch chatbot info and sources
   const fetchAll = async () => {
     setLoading(true);
     setError(null);
@@ -71,6 +77,9 @@ export default function KnowledgeVaultPage() {
         setAvatarUrl(res.responseObject.avatar_url || "");
         setLogoUrl(res.responseObject.logo_url || "");
         setPersonality(res.responseObject.personality || "friendly");
+        // Load embed configuration
+        setApiKey(res.responseObject.api_key || "");
+        setAllowedDomains(res.responseObject.allowed_domains || []);
       }
       // Fetch sources from backend
       const sourcesRes = await apiClient.get<any>(`/api/chatbot/${chatbotId}/sources`);
@@ -263,6 +272,131 @@ export default function KnowledgeVaultPage() {
               {saveLoading ? "Saving..." : "Save"}
             </Button>
           </form>
+        )}
+      </div>
+
+      {/* Website Embed Section */}
+      <div className="mb-8 p-4 border rounded bg-white dark:bg-gray-900">
+        <div className="flex items-center gap-4 mb-2">
+          <h3 className="font-semibold text-lg">Website Embed</h3>
+          <Button size="sm" onClick={() => setEmbedMode((v) => !v)}>
+            {embedMode ? "Hide" : "Setup Embed"}
+          </Button>
+        </div>
+        
+        {apiKey ? (
+          <div className="space-y-4">
+            <div>
+              <Label>Embed Code (Copy & Paste to Your Website)</Label>
+              <div className="bg-gray-100 p-3 rounded border text-sm font-mono">
+                {`<script src="${process.env.NODE_ENV === 'production' ? process.env.NEXT_PUBLIC_API_URL || 'https://yourapi.com' : 'http://localhost:3000'}/api/embed/widget/${apiKey}.js"></script>`}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Just paste this code anywhere in your website's HTML and the chatbot will appear automatically.
+              </p>
+            </div>
+            
+            {embedMode && (
+              <div className="space-y-3">
+                <div>
+                  <Label>Allowed Domains (Optional - Leave empty to allow all)</Label>
+                  <div className="space-y-2">
+                    {allowedDomains.map((domain, index) => (
+                      <div key={index} className="flex items-center gap-2">
+                        <span className="text-sm bg-gray-100 px-2 py-1 rounded">{domain}</span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setAllowedDomains(prev => prev.filter((_, i) => i !== index))}
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    ))}
+                    <div className="flex gap-2">
+                      <Input
+                        value={newDomain}
+                        onChange={e => setNewDomain(e.target.value)}
+                        placeholder="example.com or *.example.com"
+                        className="flex-1"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          if (newDomain.trim() && !allowedDomains.includes(newDomain.trim())) {
+                            setAllowedDomains(prev => [...prev, newDomain.trim()]);
+                            setNewDomain("");
+                          }
+                        }}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      setEmbedLoading(true);
+                      try {
+                        await apiClient.post(`/api/chatbot/${chatbotId}/update-domains`, {
+                          allowedDomains
+                        });
+                        await fetchAll();
+                      } catch (err) {
+                        setError("Failed to update domains");
+                      }
+                      setEmbedLoading(false);
+                    }}
+                    disabled={embedLoading}
+                  >
+                    {embedLoading ? "Saving..." : "Save Domains"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={async () => {
+                      if (confirm("Generate new API key? This will break existing embeds.")) {
+                        setEmbedLoading(true);
+                        try {
+                          await apiClient.post(`/api/chatbot/${chatbotId}/generate-api-key`);
+                          await fetchAll();
+                        } catch (err) {
+                          setError("Failed to generate new API key");
+                        }
+                        setEmbedLoading(false);
+                      }
+                    }}
+                    disabled={embedLoading}
+                  >
+                    Regenerate Key
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <p className="text-gray-600">Generate an API key to embed this chatbot on your website.</p>
+            <Button
+              size="sm"
+              onClick={async () => {
+                setEmbedLoading(true);
+                try {
+                  await apiClient.post(`/api/chatbot/${chatbotId}/generate-api-key`);
+                  await fetchAll();
+                } catch (err) {
+                  setError("Failed to generate API key");
+                }
+                setEmbedLoading(false);
+              }}
+              disabled={embedLoading}
+            >
+              {embedLoading ? "Generating..." : "Generate Embed Code"}
+            </Button>
+          </div>
         )}
       </div>
 

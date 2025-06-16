@@ -6,9 +6,8 @@ declare namespace Express {
       email: string;
       role: string;
       metadata?: Record<string, any>;
-    };
-    // Validated IDs set by authorization middleware for additional security
-    validatedChatbotId?: string;
+    };    // Validated IDs set by authorization middleware for additional security
+    validatedChatbotId?: number;
     validatedUserId?: string;
   }
 }

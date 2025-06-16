@@ -7,7 +7,7 @@ import { supabase } from "@/server";
 // Middleware to check if user owns the resource (chatbot)
 export const validateChatbotOwnership: RequestHandler = async (req, res, next) => {
     const userId = req.user?.id;
-    const chatbotId = req.params.chatbotId || req.body.chatbotId || req.query.chatbotId;
+    let chatbotIdParam = req.params.chatbotId || req.body.chatbotId || req.query.chatbotId;
     
     // Strict user ID validation
     if (!userId || typeof userId !== 'string' || userId.trim() === '') {
@@ -16,18 +16,12 @@ export const validateChatbotOwnership: RequestHandler = async (req, res, next) =
         return handleServiceResponse(serviceResponse, res);
     }
     
-    // Strict chatbot ID validation
-    if (!chatbotId || typeof chatbotId !== 'string' || chatbotId.trim() === '') {
+    // Convert and validate chatbot ID
+    const chatbotId = typeof chatbotIdParam === 'string' ? parseInt(chatbotIdParam) : chatbotIdParam;
+    
+    if (!Number.isInteger(chatbotId) || chatbotId <= 0) {
         console.warn("Authorization failed: Missing or invalid chatbot ID");
-        const serviceResponse = ServiceResponse.failure("Chatbot ID missing", null, StatusCodes.BAD_REQUEST);
-        return handleServiceResponse(serviceResponse, res);
-    }
-
-    // Prevent SQL injection and malformed IDs
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(chatbotId.trim())) {
-        console.warn("Authorization failed: Invalid chatbot ID format");
-        const serviceResponse = ServiceResponse.failure("Invalid chatbot ID format", null, StatusCodes.BAD_REQUEST);
+        const serviceResponse = ServiceResponse.failure("Invalid chatbot ID", null, StatusCodes.BAD_REQUEST);
         return handleServiceResponse(serviceResponse, res);
     }
 
@@ -36,7 +30,7 @@ export const validateChatbotOwnership: RequestHandler = async (req, res, next) =
         const { data: chatbot, error } = await supabase
             .from("chatbots")
             .select("user_id, id")
-            .eq("id", chatbotId.trim())
+            .eq("id", chatbotId)
             .single();
 
         if (error) {
@@ -59,7 +53,7 @@ export const validateChatbotOwnership: RequestHandler = async (req, res, next) =
         }
 
         // Additional security: Verify the chatbot ID matches exactly
-        if (chatbot.id !== chatbotId.trim()) {
+        if (chatbot.id !== chatbotId) {
             console.warn("Authorization failed: Chatbot ID mismatch");
             const serviceResponse = ServiceResponse.failure("Authorization validation failed", null, StatusCodes.FORBIDDEN);
             return handleServiceResponse(serviceResponse, res);

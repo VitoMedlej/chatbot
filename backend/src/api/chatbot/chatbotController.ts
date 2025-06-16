@@ -1,4 +1,6 @@
 import { handleServiceResponse } from "@/common/utils/httpHandlers";
+import { ServiceResponse } from "@/common/models/serviceResponse";
+import { StatusCodes } from "http-status-codes";
 import { RequestHandler } from "express";
 import { chatbotService } from "./chatbotService";
 import { chatbotIngestService } from "./services/chatbotIngestService";
@@ -20,7 +22,7 @@ import { supabase } from "@/server";
 import { getChatbotById } from "./services/chatbotGetService";
 import { ingestManualText } from "./services/manualIngestService";
 import { updateChatbotService } from "./services/chatbotUpdateService";
-// import { updateChatbotService } from "./services/chatbotUpdateService"; // Import the update service
+import { generateChatbotApiKey, updateChatbotDomains } from "./services/chatbotEmbedService"; // Import embed service functions
 
 
 class ChatbotController {
@@ -93,10 +95,9 @@ class ChatbotController {
     listUserChatbotsHandler: RequestHandler = async (req, res) => {
         const serviceResponse = await listUserChatbots(req);
         return handleServiceResponse(serviceResponse, res);
-    };
-
-    upsertDefaultPersonaHandler: RequestHandler = async (req, res) => {
-        const { chatbotId, businessName } = req.body;
+    };    upsertDefaultPersonaHandler: RequestHandler = async (req, res) => {
+        const chatbotId = req.validatedChatbotId!; // Use validated number from middleware  
+        const { businessName } = req.body;
         const serviceResponse = await upsertDefaultPersona(chatbotId, businessName);
         return handleServiceResponse(serviceResponse, res);
     };
@@ -109,23 +110,16 @@ class ChatbotController {
     uploadFileHandler: RequestHandler = async (req, res) => {
         const serviceResponse = await uploadFile(req);
         return handleServiceResponse(serviceResponse, res);
-    };
-
-    generateQuestionsHandler: RequestHandler = async (req, res) => {
-        const { chatbotId } = req.body;
+    };    generateQuestionsHandler: RequestHandler = async (req, res) => {
+        const chatbotId = req.validatedChatbotId!; // Use validated number from middleware
         const serviceResponse = await generateQuestions(chatbotId);
         return handleServiceResponse(serviceResponse, res);
-    };
-
-    listKnowledgeSourcesHandler: RequestHandler = async (req, res) => {
-        const chatbotId = req.params.chatbotId || req.body.chatbotId || req.query.chatbotId;
-
+    };listKnowledgeSourcesHandler: RequestHandler = async (req, res) => {
+        const chatbotId = req.validatedChatbotId!; // Use validated number from middleware
         const serviceResponse = await listKnowledgeSources(chatbotId);
         return handleServiceResponse(serviceResponse, res);
-    };
-
-    getChatbotByIdHandler: RequestHandler = async (req, res) => {
-        const chatbotId = req.params.chatbotId;
+    };getChatbotByIdHandler: RequestHandler = async (req, res) => {
+        const chatbotId = req.validatedChatbotId!; // Use validated number from middleware
         const serviceResponse = await getChatbotById(chatbotId);
         handleServiceResponse(serviceResponse, res);
     };
@@ -138,10 +132,29 @@ class ChatbotController {
     updateChatbotHandler: RequestHandler = async (req, res) => {
         const serviceResponse = await updateChatbotService(req);
         return handleServiceResponse(serviceResponse, res);
+    };    // Embed management handlers
+    generateApiKeyHandler: RequestHandler = async (req, res) => {
+        const chatbotId = parseInt(req.params.chatbotId);
+        if (!Number.isInteger(chatbotId) || chatbotId <= 0) {
+            const serviceResponse = ServiceResponse.failure("Invalid chatbot ID", null, StatusCodes.BAD_REQUEST);
+            return handleServiceResponse(serviceResponse, res);
+        }
+        const serviceResponse = await generateChatbotApiKey(chatbotId);
+        return handleServiceResponse(serviceResponse, res);
     };
 
+    updateDomainsHandler: RequestHandler = async (req, res) => {
+        const chatbotId = parseInt(req.params.chatbotId);
+        if (!Number.isInteger(chatbotId) || chatbotId <= 0) {
+            const serviceResponse = ServiceResponse.failure("Invalid chatbot ID", null, StatusCodes.BAD_REQUEST);
+            return handleServiceResponse(serviceResponse, res);
+        }
+        const { allowedDomains } = req.body;
+        const serviceResponse = await updateChatbotDomains(chatbotId, allowedDomains || []);
+        return handleServiceResponse(serviceResponse, res);
+    };    // Delete chatbot handler
     deleteChatbotHandler: RequestHandler = async (req, res) => {
-        const chatbotId = req.params.chatbotId || req.body.chatbotId;
+        const chatbotId = req.validatedChatbotId!; // Use validated number from middleware
         const serviceResponse = await deleteChatbot(chatbotId);
         return handleServiceResponse(serviceResponse, res);
     };

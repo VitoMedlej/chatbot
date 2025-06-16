@@ -82,9 +82,9 @@ export async function deleteChunks(
  * Delete an entire chatbot and all its associated data.
  * This is a destructive operation that cannot be undone.
  */
-export async function deleteChatbot(chatbotId: string): Promise<ServiceResponse<any>> {
+export async function deleteChatbot(chatbotId: number): Promise<ServiceResponse<any>> {
     // Validate chatbotId
-    if (!chatbotId || typeof chatbotId !== 'string' || chatbotId.trim() === '') {
+    if (!Number.isInteger(chatbotId) || chatbotId <= 0) {
         return ServiceResponse.failure("Invalid or missing chatbotId", null, StatusCodes.BAD_REQUEST);
     }
 

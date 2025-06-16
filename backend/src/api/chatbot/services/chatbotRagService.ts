@@ -16,12 +16,10 @@ async function retrieveAndAnswer(req: Request): Promise<ServiceResponse<null | {
 
         if (!chatbotId || !userId) {
             return ServiceResponse.failure("Missing or invalid chatbotId or userId.", null, StatusCodes.BAD_REQUEST);
-        }
-
-        // Use the production engine with validated parameters
+        }        // Use the production engine with validated parameters
         const result = await productionChatbotEngine.processChat({
             userId: userId,
-            chatbotId: chatbotId,
+            chatbotId: String(chatbotId), // Convert number to string for chat engine
             message: question.trim()
         });
 

@@ -39,6 +39,10 @@ chatbotRouter.post("/ingest-manual-links", validateChatbotOwnership, chatbotCont
 // Persona management routes
 chatbotRouter.post("/upsert-default-persona", validateChatbotOwnership, chatbotController.upsertDefaultPersonaHandler);
 
+// Embed management routes
+chatbotRouter.post("/:chatbotId/generate-api-key", validateChatbotOwnership, chatbotController.generateApiKeyHandler);
+chatbotRouter.post("/:chatbotId/update-domains", validateChatbotOwnership, chatbotController.updateDomainsHandler);
+
 // Sub-routers with ownership validation
 chatbotRouter.use("/persona", validateChatbotOwnership, personaRouter);
 chatbotRouter.use("/file", validateChatbotOwnership, fileRouter);

@@ -11,10 +11,10 @@ const GENERAL_QUESTIONS = [
     "Do you have any ongoing promotions?"
 ];
 
-export async function generateQuestions(chatbotId: string): Promise<ServiceResponse<string[]>> {
+export async function generateQuestions(chatbotId: number): Promise<ServiceResponse<string[]>> {
     try {
-        if (!chatbotId) {
-            return ServiceResponse.failure("Missing chatbotId.", [], StatusCodes.BAD_REQUEST);
+        if (!Number.isInteger(chatbotId) || chatbotId <= 0) {
+            return ServiceResponse.failure("Invalid chatbotId.", [], StatusCodes.BAD_REQUEST);
         }
 
         // Fetch vector data for the chatbot

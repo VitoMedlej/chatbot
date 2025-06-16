@@ -1,5 +1,6 @@
 import cors from "cors";
 import express, { type Express, Request, Response, NextFunction } from "express";
+import path from "path";
 import helmet from "helmet";
 // NEW: For environment variables (like API keys)
 import dotenv from "dotenv";
@@ -10,7 +11,9 @@ import { createClient } from "@supabase/supabase-js";
 // Keeping rate limiter, as it was in your old package.json and is a good practice
 import rateLimit from "express-rate-limit";
 import { chatbotRouter } from "./api/chatbot/chatbotRouter";
+import { chatbotEmbedRouter } from "./api/chatbot/chatbotEmbedRouter";
 import { healthCheckRouter } from "./api/healthCheck/healthCheckRouter";
+import { embedRouter } from "./api/embed/embedRouter";
 import authenticateRequest from "./common/middleware/authHandler"; // THIS IS THE MIDDLEWARE
 import { sanitizeInput } from "./common/middleware/inputValidation";
 import { env } from "./common/utils/envConfig";
@@ -93,6 +96,9 @@ app.set("trust proxy", 1);
 app.use(express.json({ limit: '1mb' })); // Increase limit for potentially large text inputs
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
+// Serve static embed widget
+app.use('/embed', express.static(path.join(__dirname, '../public/embed')));
+
 // Apply input sanitization to all routes
 app.use(sanitizeInput);
 
@@ -134,9 +140,10 @@ app.get("/api/health-check", (req, res) => {
 
 // Public routes (no authentication required)
 app.use("/health-check", healthCheckRouter);
+app.use("/api/embed", embedRouter); // NEW: Secure public embed endpoints
 
 // Protected routes (authentication required)
-app.use("/api/chatbot", authenticateRequest, chatbotRouter); // This line is correct
+app.use("/api/chatbot", authenticateRequest, chatbotRouter);// This line is correct
 
 // --- Apply Your New Routes Here ---
 // app.use("/api", chatbotRoutes);     // Example: for /api/ingest-text, /api/chat

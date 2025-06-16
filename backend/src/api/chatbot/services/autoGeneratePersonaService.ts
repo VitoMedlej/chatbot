@@ -7,9 +7,9 @@ import { supabase, openai } from "@/server";
 /**
  * Upserts a default persona for a chatbot using a provided business name.
  */
-export async function upsertDefaultPersona(chatbotId: string, businessName: string, personality: string = "friendly"): Promise<ServiceResponse<any>> {
-    if (!chatbotId || !businessName) {
-        return ServiceResponse.failure("Missing chatbotId or businessName.", null, StatusCodes.BAD_REQUEST);
+export async function upsertDefaultPersona(chatbotId: number, businessName: string, personality: string = "friendly"): Promise<ServiceResponse<any>> {
+    if (!Number.isInteger(chatbotId) || chatbotId <= 0 || !businessName) {
+        return ServiceResponse.failure("Missing or invalid chatbotId or businessName.", null, StatusCodes.BAD_REQUEST);
     }
     let personaText = "You are the helpful assistant for " + businessName + ".";
     let instructions = "Be concise and helpful. Never say you are ChatGPT. Always answer as a representative of the business. If you don't know, suggest contacting support.";
@@ -57,9 +57,11 @@ export async function upsertDefaultPersona(chatbotId: string, businessName: stri
  * Auto-generates a persona from website content, or falls back to default if no content.
  */
 export async function autoGeneratePersona(req: any): Promise<ServiceResponse<any>> {
-    const { chatbotId, businessName, personality = "friendly" } = req.body;
-    if (!chatbotId) {
-        return ServiceResponse.failure("Missing chatbotId.", null, StatusCodes.BAD_REQUEST);
+    const chatbotId = req.validatedChatbotId; // Use validated number from middleware
+    const { businessName, personality = "friendly" } = req.body;
+    
+    if (!Number.isInteger(chatbotId) || chatbotId <= 0) {
+        return ServiceResponse.failure("Missing or invalid chatbotId.", null, StatusCodes.BAD_REQUEST);
     }
     const { data: chunks, error } = await supabase
         .from("document_chunks")
