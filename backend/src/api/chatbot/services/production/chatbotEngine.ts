@@ -1,6 +1,8 @@
 import { ServiceResponse } from "@/common/models/serviceResponse";
 import { StatusCodes } from "http-status-codes";
 import { supabase, openai } from "@/server";
+import { PromptSecurityService } from "@/services/promptSecurityService";
+import { SecurePromptBuilder } from "@/services/securePromptBuilder";
 
 interface ChatRequest {
   userId: string;
@@ -49,33 +51,66 @@ export class ProductionChatbotEngine {
     MIN_CHUNK_LENGTH: 100,
     MAX_CHUNK_LENGTH: 1000
   };
-  async processChat(request: ChatRequest): Promise<ServiceResponse<string>> {
-    try {
-      // 1. Validate request
-      const validation = this.validateRequest(request);
+  async processChat(request: ChatRequest): Promise<ServiceResponse<string>> {    try {
+      // 1. SECURITY: Validate input for prompt injection
+      const securityValidation = await PromptSecurityService.validateUserInput(
+        request.message, 
+        request.sessionId || request.userId
+      );
+      
+      if (!securityValidation.success) {
+        // Log security incident
+        console.warn('[SECURITY BLOCK]', {
+          userId: request.userId,
+          chatbotId: request.chatbotId,
+          message: request.message.substring(0, 100),
+          reason: securityValidation.message,
+          timestamp: new Date().toISOString()
+        });
+        
+        return securityValidation;
+      }
+
+      // Use sanitized message
+      const sanitizedMessage = securityValidation.responseObject!;
+
+      // 2. Validate request structure
+      const validation = this.validateRequest({ ...request, message: sanitizedMessage });
       if (!validation.isValid) {
         return ServiceResponse.failure(validation.error!, "", StatusCodes.BAD_REQUEST);
       }
 
-      // 2. Build context
-      const context = await this.buildContext(request);
+      // 3. Build context with sanitized input
+      const context = await this.buildContext({ ...request, message: sanitizedMessage });
       if (!context) {
         return ServiceResponse.failure("Failed to build context", "", StatusCodes.INTERNAL_SERVER_ERROR);
-      }
-
-      // 3. Generate response
-      const response = await this.generateResponse(request, context);
+      }      // 4. Generate response with security measures
+      const response = await this.generateResponse({ ...request, message: sanitizedMessage }, context);
       if (!response) {
         return this.getFallbackResponse();
       }
 
-      // 4. Validate and sanitize response
+      // 5. Validate response for security
+      const responseValidation = SecurePromptBuilder.validateResponse(response);
+      if (!responseValidation.isValid) {
+        console.warn('[SECURITY] Compromised response detected:', {
+          reason: responseValidation.reason,
+          response: response.substring(0, 100),
+          chatbotId: request.chatbotId,
+          timestamp: new Date().toISOString()
+        });
+        
+        return this.getFallbackResponse();
+      }
+
+      // 6. Final sanitization and storage
       const finalResponse = this.validateAndSanitizeResponse(response, context.businessInfo);
       if (!finalResponse) {
         return this.getFallbackResponse();
       }
 
-      // 5. Store conversation
+      // 7. Store conversation with sanitized data
+      await this.storeConversation({ ...request, message: sanitizedMessage }, finalResponse);
       await this.storeConversation(request, finalResponse);
 
       return ServiceResponse.success("Response generated", finalResponse);
@@ -225,14 +260,12 @@ export class ProductionChatbotEngine {
     // Build context string
     const contextString = context.chunks
       .map(chunk => `[Source: ${chunk.source}]\n${chunk.content}`)
-      .join('\n\n---\n\n');
-
-    // Build conversation messages
+      .join('\n\n---\n\n');    // Build conversation messages with secure user input wrapping
     const messages = [
       { role: 'system' as const, content: systemPrompt },
       ...(contextString ? [{ role: 'system' as const, content: `Context:\n${contextString}` }] : []),
       ...context.conversation.messages.slice(-6), // Last 6 messages for context
-      { role: 'user' as const, content: request.message }
+      { role: 'user' as const, content: SecurePromptBuilder.wrapUserMessage(request.message) }
     ];
 
     // Generate response
@@ -247,26 +280,9 @@ export class ProductionChatbotEngine {
 
     return completion.choices[0]?.message?.content || null;
   }
-
   private buildSystemPrompt(businessInfo: BusinessInfo): string {
-    return `You are the official customer service representative for ${businessInfo.name}.
-
-PERSONALITY: ${businessInfo.tone}
-ROLE: Customer service representative
-BUSINESS CONTEXT: ${businessInfo.persona}
-
-GUIDELINES:
-${businessInfo.guidelines.map(g => `- ${g}`).join('\n')}
-
-RESTRICTIONS:
-${businessInfo.restrictions.map(r => `- ${r}`).join('\n')}
-
-RESPONSE RULES:
-- Use only the provided context to answer questions
-- If information is not in the context, say "I don't have that specific information available"
-- Keep responses concise and helpful
-- Always maintain a professional tone
-- Focus on being helpful while staying within your knowledge bounds`;
+    // Use secure prompt builder instead of simple concatenation
+    return SecurePromptBuilder.buildSecureSystemPrompt(businessInfo);
   }
 
   private validateAndSanitizeResponse(response: string, businessInfo: BusinessInfo): string | null {
