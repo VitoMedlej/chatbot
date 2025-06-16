@@ -4,7 +4,7 @@ import { productionChatbotEngine } from "../chatbot/services/production/chatbotE
 import { handleServiceResponse } from "@/common/utils/httpHandlers";
 import { ServiceResponse } from "@/common/models/serviceResponse";
 import { StatusCodes } from "http-status-codes";
-import { config } from "@/config/environment";
+import { env } from "@/common/utils/envConfig";
 import { 
   createEmbedRateLimit, 
   validateRequest, 
@@ -168,9 +168,8 @@ embedRouter.post("/analytics", async (req, res) => {
     if (!apiKey.startsWith('cb_')) {
       return res.status(400).json({ error: "Invalid API key format" });
     }
-    
-    // Log analytics event (in production, send to proper analytics service)
-    if (config.monitoring.enableRequestLogging) {
+      // Log analytics event (in production, send to proper analytics service)
+    if (env.NODE_ENV === 'production' || process.env.ENABLE_REQUEST_LOGGING !== 'false') {
       console.info('[ANALYTICS]', {
         apiKey,
         event,
@@ -214,7 +213,7 @@ embedRouter.get("/health", async (req, res) => {
       status: "healthy",
       timestamp: new Date().toISOString(),
       version: "1.0.0",
-      environment: config.isProduction ? "production" : "development",
+      environment: env.NODE_ENV === 'production' ? "production" : "development",
       services: {
         database: "unknown", // Could check Supabase connection
         openai: "unknown",   // Could check OpenAI API
@@ -235,7 +234,9 @@ embedRouter.get("/health", async (req, res) => {
  * Generate the embed widget JavaScript code
  */
 function generateWidgetScript(apiKey: string): string {
-  const baseUrl = config.isProduction ? config.apiBaseUrl : `http://localhost:${config.port}`;
+  const baseUrl = env.NODE_ENV === 'production' 
+    ? (process.env.API_BASE_URL || 'https://yourapi.com') 
+    : `http://localhost:${env.PORT}`;
   
   return `
 (function() {

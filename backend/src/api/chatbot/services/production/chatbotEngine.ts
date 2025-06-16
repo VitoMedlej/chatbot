@@ -107,11 +107,8 @@ export class ProductionChatbotEngine {
       const finalResponse = this.validateAndSanitizeResponse(response, context.businessInfo);
       if (!finalResponse) {
         return this.getFallbackResponse();
-      }
-
-      // 7. Store conversation with sanitized data
+      }      // 7. Store conversation with sanitized data
       await this.storeConversation({ ...request, message: sanitizedMessage }, finalResponse);
-      await this.storeConversation(request, finalResponse);
 
       return ServiceResponse.success("Response generated", finalResponse);
     } catch (error: any) {

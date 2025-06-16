@@ -4,7 +4,7 @@ import { z } from "zod";
 import { ServiceResponse } from "../models/serviceResponse";
 import { StatusCodes } from "http-status-codes";
 import { handleServiceResponse } from "../utils/httpHandlers";
-import { config } from "@/config/environment";
+import { env } from "../utils/envConfig";
 
 // Input validation schemas
 export const embedChatSchema = z.object({
@@ -46,11 +46,11 @@ export function validateRequest<T>(schema: z.ZodSchema<T>) {
 
 // Enhanced rate limiting for embed endpoints
 export const createEmbedRateLimit = () => rateLimit({
-  windowMs: config.rateLimit.windowMs,
-  max: config.rateLimit.embedMax,
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 50, // Embed rate limit
   message: {
     error: "Rate limit exceeded for chatbot embed",
-    retryAfter: `${config.rateLimit.windowMs / 1000 / 60} minutes`
+    retryAfter: "15 minutes"
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -61,17 +61,17 @@ export const createEmbedRateLimit = () => rateLimit({
   },
   skip: (req) => {
     // Skip rate limiting in development/test
-    return !config.isProduction && config.isDevelopment;
+    return env.NODE_ENV !== 'production';
   },
 });
 
 // General API rate limiting
 export const createApiRateLimit = () => rateLimit({
-  windowMs: config.rateLimit.windowMs,
-  max: config.rateLimit.maxRequests,
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: env.NODE_ENV === 'production' ? 100 : 1000,
   message: {
     error: "Too many requests",
-    retryAfter: `${config.rateLimit.windowMs / 1000 / 60} minutes`
+    retryAfter: "15 minutes"
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -82,7 +82,7 @@ export const createApiRateLimit = () => rateLimit({
   },
   skip: (req) => {
     // Skip rate limiting in development/test
-    return !config.isProduction && config.isDevelopment;
+    return env.NODE_ENV !== 'production';
   },
 });
 
@@ -118,7 +118,7 @@ export const sanitizeInput = (req: Request, res: Response, next: NextFunction) =
 export const errorLogger = (error: Error, req: Request, res: Response, next: NextFunction) => {
   console.error(`[ERROR] ${req.method} ${req.path}:`, {
     error: error.message,
-    stack: config.isDevelopment ? error.stack : undefined,
+    stack: env.NODE_ENV === 'development' ? error.stack : undefined,
     userId: req.user?.id,
     chatbotId: req.validatedChatbotId,
     ip: req.ip,
@@ -127,7 +127,7 @@ export const errorLogger = (error: Error, req: Request, res: Response, next: Nex
   });
   
   // Don't expose internal errors in production
-  if (config.isProduction) {
+  if (env.NODE_ENV === 'production') {
     const serviceResponse = ServiceResponse.failure(
       "Internal server error",
       null,
@@ -141,7 +141,10 @@ export const errorLogger = (error: Error, req: Request, res: Response, next: Nex
 
 // Usage analytics middleware
 export const usageAnalytics = (req: Request, res: Response, next: NextFunction) => {
-  if (!config.monitoring.enableRequestLogging) {
+  // Simple check - enable logging in production unless explicitly disabled
+  const loggingEnabled = env.NODE_ENV === 'production' || process.env.ENABLE_REQUEST_LOGGING !== 'false';
+  
+  if (!loggingEnabled) {
     return next();
   }
   

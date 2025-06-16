@@ -5,8 +5,17 @@
  * Run this script before deploying to production
  */
 
-import { config } from './src/config/environment.js';
-import { supabase } from './src/server.js';
+// Check if built version exists
+const fs = require('fs');
+const path = require('path');
+
+if (!fs.existsSync('./dist')) {
+  console.error('❌ Build directory not found. Please run "npm run build" first.');
+  process.exit(1);
+}
+
+const { config } = require('./dist/config/environment.js');
+const { supabase } = require('./dist/server.js');
 
 const checks = [];
 

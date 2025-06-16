@@ -1,5 +1,5 @@
 import { supabase } from "@/server";
-import { config } from "@/config/environment";
+import { env } from "@/common/utils/envConfig";
 
 // Production monitoring and analytics service
 export class EmbedAnalyticsService {
@@ -22,7 +22,7 @@ export class EmbedAnalyticsService {
     metadata?: Record<string, any>;
   }): Promise<void> {
     try {
-      if (!config.isProduction) {
+      if (env.NODE_ENV !== 'production') {
         console.info('[ANALYTICS]', data);
         return;
       }
